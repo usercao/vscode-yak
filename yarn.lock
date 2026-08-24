@@ -2729,6 +2729,8 @@ __metadata:
     vitest: "npm:^4.1.11"
     vscode-css-languageservice: "npm:^6.3.10"
     vscode-languageserver-textdocument: "npm:^1.0.12"
+    vscode-oniguruma: "npm:^2.0.1"
+    vscode-textmate: "npm:^9.3.2"
   languageName: unknown
   linkType: soft
 
@@ -4119,6 +4121,20 @@ __metadata:
   version: 3.17.5
   resolution: "vscode-languageserver-types@npm:3.17.5"
   checksum: 10c0/1e1260de79a2cc8de3e46f2e0182cdc94a7eddab487db5a3bd4ee716f67728e685852707d72c059721ce500447be9a46764a04f0611e94e4321ffa088eef36f8
+  languageName: node
+  linkType: hard
+
+"vscode-oniguruma@npm:^2.0.1":
+  version: 2.0.1
+  resolution: "vscode-oniguruma@npm:2.0.1"
+  checksum: 10c0/8d44354ad038f5ba10edf6fc3e3fd6dbacf0db6ecbe924a632b8c0a2929dbdad451c619164e48539b5a80ff112fc51d368b4637db2ed202a4fd5504621275289
+  languageName: node
+  linkType: hard
+
+"vscode-textmate@npm:^9.3.2":
+  version: 9.3.2
+  resolution: "vscode-textmate@npm:9.3.2"
+  checksum: 10c0/873c319d4ca245e97a106be92c2ae9d7d3dd5a3b4cdbdf609a21314c3e8e9c034d65238219b2b150815e8f4230b3db718a173f3185472e92dd8d974296758b8f
   languageName: node
   linkType: hard
 

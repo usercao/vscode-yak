@@ -3,7 +3,7 @@ const vscode = require('vscode')
 
 const cursorMarker = '/*cursor*/'
 
-async function completionLabels(source) {
+async function completionItems(source) {
   const cursorOffset = source.indexOf(cursorMarker)
 
   assert.notEqual(cursorOffset, -1, `Missing ${cursorMarker} marker`)
@@ -20,18 +20,29 @@ async function completionLabels(source) {
     document.positionAt(cursorOffset),
   )
 
-  return completionList?.items.map((item) => typeof item.label === 'string' ? item.label : item.label.label) ?? []
+  return { document, items: completionList?.items ?? [] }
 }
 
-async function assertIncludesPseudoCompletion(selector, expectedLabel) {
-  const labels = await completionLabels([
+async function completionLabels(source) {
+  const { items } = await completionItems(source)
+  return items.map((item) => typeof item.label === 'string' ? item.label : item.label.label)
+}
+
+async function assertPseudoCompletion(selector, expectedLabel, expectedInsertText) {
+  const { document, items } = await completionItems([
     "import { styled } from 'next-yak'",
     'const Link = styled.a`',
     `  ${selector}${cursorMarker}`,
     '`',
   ].join('\n'))
+  const completion = items.find((item) => (typeof item.label === 'string' ? item.label : item.label.label) === expectedLabel)
 
-  assert.ok(labels.includes(expectedLabel), `Expected ${expectedLabel} in ${labels.join(', ')}`)
+  assert.ok(completion, `Expected ${expectedLabel} in ${items.map((item) => item.label).join(', ')}`)
+  assert.ok(completion.range instanceof vscode.Range, `Expected ${expectedLabel} to define a replacement range`)
+  assert.equal(document.getText(completion.range), selector)
+  assert.equal(completion.filterText, selector)
+  assert.equal(completion.insertText, expectedInsertText)
+  assert.match(completion.sortText ?? '', /^!/)
 }
 
 exports.run = async () => {
@@ -40,8 +51,8 @@ exports.run = async () => {
   assert.ok(extension, 'The next-yak extension should be available in the Extension Development Host')
   await extension.activate()
 
-  await assertIncludesPseudoCompletion('a:', ':hover')
-  await assertIncludesPseudoCompletion('a::', '::before')
+  await assertPseudoCompletion('a:', ':hover', 'a:hover')
+  await assertPseudoCompletion('a::', '::before', 'a::before')
 
   const aliasLabels = await completionLabels([
     "import { styled as s } from 'next-yak'",

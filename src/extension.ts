@@ -135,7 +135,7 @@ function getSelectorCompletionItems(
   return completions.items
     .filter((item) => item.label.startsWith(':') && !existingLabels.has(item.label))
     .flatMap((item) => {
-      const completion = toCompletionItem(item, document, selectorDocument)
+      const completion = toSelectorCompletionItem(item, document, selectorDocument, selectorContext)
       return completion ? [completion] : []
     })
 }
@@ -166,6 +166,35 @@ function createSelectorDocument(
     sourceLength: context.text.length,
     sourceStart: context.sourceStart,
   }
+}
+
+function toSelectorCompletionItem(
+  item: CssCompletionItem,
+  document: vscode.TextDocument,
+  selectorDocument: VirtualCssDocument,
+  selectorContext: SelectorCompletionContext,
+): vscode.CompletionItem | undefined {
+  const completion = toCompletionItem(item, document, selectorDocument)
+  const textEdit = getTextEdit(item)
+
+  if (!completion || !textEdit) {
+    return completion
+  }
+
+  const pseudoSelectorStart = selectorDocument.document.offsetAt(textEdit.range.start)
+  const selectorRange = new vscode.Range(
+    document.positionAt(selectorContext.sourceStart),
+    document.positionAt(selectorContext.sourceStart + selectorContext.text.length),
+  )
+
+  completion.range = selectorRange
+  completion.insertText = toInsertText(
+    `${selectorContext.text.slice(0, pseudoSelectorStart)}${textEdit.newText}`,
+    item.insertTextFormat,
+  )
+  completion.filterText = selectorContext.text
+
+  return completion
 }
 
 function toCompletionItem(

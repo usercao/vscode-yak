@@ -26,6 +26,12 @@
           "include": "#interpolation-ts"
         },
         {
+          "include": "#root-selector"
+        },
+        {
+          "include": "#root-incomplete-selector"
+        },
+        {
           "include": "#root-declaration"
         },
         {
@@ -56,6 +62,12 @@
           "include": "#interpolation-ts"
         },
         {
+          "include": "#root-selector"
+        },
+        {
+          "include": "#root-incomplete-selector"
+        },
+        {
           "include": "#root-declaration"
         },
         {
@@ -65,6 +77,26 @@
     }
   ],
   "repository": {
+    "root-selector": {
+      "begin": "(?m)^(?=\\s*(?:[^{}\\n]*)(?:::[-_a-zA-Z][-_a-zA-Z0-9]*|:[-_a-zA-Z][-_a-zA-Z0-9]*)(?:[^{}\\n]*)\\{)",
+      "end": "(?=\\{)",
+      "name": "meta.selector.css",
+      "patterns": [
+        {
+          "include": "source.css#selector-innards"
+        }
+      ]
+    },
+    "root-incomplete-selector": {
+      "begin": "(?m)^(\\s*)(?=[a-zA-Z][-_a-zA-Z0-9]*(?::(?:active|any-link|checked|disabled|empty|enabled|first|(?:first|last|only)-(?:child|of-type)|focus|focus-visible|focus-within|fullscreen|host|hover|in-range|indeterminate|invalid|left|link|optional|out-of-range|read-only|read-write|required|right|root|scope|target|unresolved|valid|visited)(?![-_a-zA-Z0-9])|::?(?:after|before|first-letter|first-line|backdrop|content|grammar-error|marker|placeholder|selection|shadow|spelling-error)(?![-_a-zA-Z0-9])|:(?:dir|lang|not|has|matches|where|is|nth-(?:last-)?(?:child|of-type))\\()[^{};\\n]*$)",
+      "end": "$",
+      "name": "meta.selector.css",
+      "patterns": [
+        {
+          "include": "source.css#selector-innards"
+        }
+      ]
+    },
     "interpolation-ts": {
       "name": "meta.embedded.line.ts",
       "begin": "\\$\\{",

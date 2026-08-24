@@ -43,7 +43,9 @@
     "@vscode/vsce": "3.9.2",
     "tsdown": "^0.22.14",
     "typescript": "~6.0.2",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2"
   },
   "contributes": {
     "grammars": [
