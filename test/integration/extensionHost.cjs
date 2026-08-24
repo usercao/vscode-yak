@@ -28,7 +28,7 @@ async function completionLabels(source) {
   return items.map((item) => typeof item.label === 'string' ? item.label : item.label.label)
 }
 
-async function assertPseudoCompletion(selector, expectedLabel, expectedInsertText) {
+async function assertPseudoCompletion(selector, expectedLabel, expectedInsertText, expectedFilterText = expectedInsertText) {
   const { document, items } = await completionItems([
     "import { styled } from 'next-yak'",
     'const Link = styled.a`',
@@ -40,7 +40,7 @@ async function assertPseudoCompletion(selector, expectedLabel, expectedInsertTex
   assert.ok(completion, `Expected ${expectedLabel} in ${items.map((item) => item.label).join(', ')}`)
   assert.ok(completion.range instanceof vscode.Range, `Expected ${expectedLabel} to define a replacement range`)
   assert.equal(document.getText(completion.range), selector)
-  assert.equal(completion.filterText, selector)
+  assert.equal(completion.filterText, expectedFilterText)
   assert.equal(completion.insertText, expectedInsertText)
   assert.match(completion.sortText ?? '', /^!/)
 }
@@ -52,6 +52,7 @@ exports.run = async () => {
   await extension.activate()
 
   await assertPseudoCompletion('a:', ':hover', 'a:hover')
+  await assertPseudoCompletion('a:ho', ':hover', 'a:hover')
   await assertPseudoCompletion('a::', '::before', 'a::before')
 
   const aliasLabels = await completionLabels([

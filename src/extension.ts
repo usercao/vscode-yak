@@ -186,13 +186,11 @@ function toSelectorCompletionItem(
     document.positionAt(selectorContext.sourceStart),
     document.positionAt(selectorContext.sourceStart + selectorContext.text.length),
   )
+  const selectorText = `${selectorContext.text.slice(0, pseudoSelectorStart)}${textEdit.newText}`
 
   completion.range = selectorRange
-  completion.insertText = toInsertText(
-    `${selectorContext.text.slice(0, pseudoSelectorStart)}${textEdit.newText}`,
-    item.insertTextFormat,
-  )
-  completion.filterText = selectorContext.text
+  completion.insertText = toInsertText(selectorText, item.insertTextFormat)
+  completion.filterText = selectorText
 
   return completion
 }
