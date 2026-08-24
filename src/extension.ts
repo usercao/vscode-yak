@@ -44,7 +44,7 @@ export function activate(context: vscode.ExtensionContext) {
   )
 }
 
-class NextYakCssCompletionProvider implements vscode.CompletionItemProvider {
+export class NextYakCssCompletionProvider implements vscode.CompletionItemProvider {
   provideCompletionItems(
     document: vscode.TextDocument,
     position: vscode.Position,
@@ -75,10 +75,14 @@ class NextYakCssCompletionProvider implements vscode.CompletionItemProvider {
       return undefined
     }
 
-    const items = completions.items.flatMap((item) => {
-      const completion = toCompletionItem(item, document, virtualCss)
-      return completion ? [completion] : []
-    })
+    const selectorContext = getSelectorCompletionContext(source, cursorOffset, template)
+    const usesSelectorFallback = selectorContext && isSelectorCompletionContext(selectorContext)
+    const items = completions.items
+      .filter((item) => !usesSelectorFallback || !item.label.startsWith(':'))
+      .flatMap((item) => {
+        const completion = toCompletionItem(item, document, virtualCss)
+        return completion ? [completion] : []
+      })
     const existingLabels = new Set(items.map((item) => typeof item.label === 'string' ? item.label : item.label.label))
     const selectorItems = getSelectorCompletionItems(
       source,

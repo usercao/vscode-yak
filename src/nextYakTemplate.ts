@@ -43,6 +43,21 @@ interface TagPath {
 type NextYakBinding = NamedNextYakBinding | NamespaceNextYakBinding
 
 const nextYakTagNames = new Set<NextYakTag>(['styled', 'css', 'globalStyle', 'keyframes'])
+const regularExpressionPrefixKeywords = new Set([
+  'case',
+  'delete',
+  'do',
+  'else',
+  'in',
+  'instanceof',
+  'new',
+  'of',
+  'return',
+  'throw',
+  'typeof',
+  'void',
+  'yield',
+])
 
 export function findNextYakTemplate(
   source: string,
@@ -108,7 +123,11 @@ export function scanTemplate(source: string, bodyStart: number, bodyEnd = source
       interpolations.push({ start: offset - bodyStart, end: rangeEnd - bodyStart })
 
       if (!interpolationEnd) {
-        return { bodyEnd, interpolations }
+        return {
+          bodyEnd,
+          interpolations,
+          unterminatedInterpolationStart: offset - bodyStart,
+        }
       }
 
       offset = interpolationEnd
@@ -207,6 +226,10 @@ function createTemplate(
   const bodyEnd = scannedTemplate.bodyEnd
   const cursorInBody = cursorOffset - bodyStart
 
+  if (scannedTemplate.unterminatedInterpolationStart !== undefined && cursorInBody >= scannedTemplate.unterminatedInterpolationStart) {
+    return undefined
+  }
+
   if (scannedTemplate.interpolations.some((range) => isOffsetInRange(cursorInBody, range))) {
     return undefined
   }
@@ -230,7 +253,13 @@ function collectNextYakBindings(sourceFile: ts.SourceFile, checker: ts.TypeCheck
       continue
     }
 
-    const namedBindings = statement.importClause?.namedBindings
+    const importClause = statement.importClause
+
+    if (!importClause || importClause.isTypeOnly) {
+      continue
+    }
+
+    const namedBindings = importClause.namedBindings
 
     if (!namedBindings) {
       continue
@@ -247,6 +276,10 @@ function collectNextYakBindings(sourceFile: ts.SourceFile, checker: ts.TypeCheck
     }
 
     for (const element of namedBindings.elements) {
+      if (element.isTypeOnly) {
+        continue
+      }
+
       const importedName = element.propertyName?.text ?? element.name.text
 
       if (!isNextYakTag(importedName)) {
@@ -415,6 +448,11 @@ function findInterpolationEnd(source: string, start: number, end: number): numbe
       continue
     }
 
+    if (character === '/' && isRegularExpressionLiteralStart(source, offset, start)) {
+      offset = skipRegularExpressionLiteral(source, offset, end)
+      continue
+    }
+
     if (character === '{') {
       braceDepth += 1
     } else if (character === '}') {
@@ -460,6 +498,70 @@ function skipTemplateLiteral(source: string, start: number, end: number) {
     } else {
       offset += 1
     }
+  }
+
+  return end
+}
+
+function isRegularExpressionLiteralStart(source: string, start: number, expressionStart: number) {
+  let offset = start - 1
+
+  while (offset >= expressionStart && /\s/.test(source[offset])) {
+    offset -= 1
+  }
+
+  if (offset < expressionStart) {
+    return true
+  }
+
+  const previousCharacter = source[offset]
+
+  if ('([{:;,=!?~+-*%&|^<>'.includes(previousCharacter)) {
+    return true
+  }
+
+  if (!/[A-Za-z_$]/.test(previousCharacter)) {
+    return false
+  }
+
+  const wordEnd = offset + 1
+
+  while (offset >= expressionStart && /[A-Za-z0-9_$]/.test(source[offset])) {
+    offset -= 1
+  }
+
+  return regularExpressionPrefixKeywords.has(source.slice(offset + 1, wordEnd))
+}
+
+function skipRegularExpressionLiteral(source: string, start: number, end: number) {
+  let offset = start + 1
+  let insideCharacterClass = false
+
+  while (offset < end) {
+    const character = source[offset]
+
+    if (character === '\\') {
+      offset += 2
+      continue
+    }
+
+    if (character === '[') {
+      insideCharacterClass = true
+    } else if (character === ']') {
+      insideCharacterClass = false
+    } else if (character === '/' && !insideCharacterClass) {
+      offset += 1
+
+      while (offset < end && /[A-Za-z]/.test(source[offset])) {
+        offset += 1
+      }
+
+      return offset
+    } else if (character === '\n' || character === '\r') {
+      return offset
+    }
+
+    offset += 1
   }
 
   return end

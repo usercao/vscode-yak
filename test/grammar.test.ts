@@ -138,4 +138,32 @@ describe('next-yak TextMate grammar', () => {
       'punctuation.section.property-list.begin.bracket.curly.css',
     )
   })
+
+  it.each([
+    ['TypeScript React', 'source.tsx'],
+    ['JavaScript React', 'source.js.jsx'],
+  ])('documents that %s highlighting can statically misidentify unrelated styled templates', async (_, scopeName) => {
+    const grammar = await loadGrammar(scopeName)
+
+    if (!grammar) {
+      throw new Error(`Unable to load ${scopeName} grammar`)
+    }
+
+    let ruleStack = INITIAL
+    const lines = [
+      "import { styled } from 'another-library'",
+      'const Link = styled.a`',
+      '  color: red;',
+      '`',
+    ]
+    const tokenizedLines = lines.map((line) => {
+      const result = grammar.tokenizeLine(line, ruleStack)
+      ruleStack = result.ruleStack
+      return result.tokens
+    })
+
+    expect(scopesAtOffset(lines[2], tokenizedLines[2], lines[2].indexOf('color'))).toContain(
+      'support.type.property-name.css',
+    )
+  })
 })

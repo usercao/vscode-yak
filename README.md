@@ -67,10 +67,10 @@ yarn build
 yarn verify
 ```
 
-`yarn test` covers template detection and source-to-virtual-CSS mapping. `yarn test:integration` starts an Extension Development Host and verifies actual TSX completion behavior. `yarn verify` runs both test layers, the type check, and creates a standalone VSIX. CSS language-service and TypeScript parser dependencies are bundled into `dist/extension.cjs`; the packaged extension only needs the VS Code extension host's `vscode` API at runtime.
+`yarn test` runs ESM Vitest coverage for template detection, import semantics, interpolation masking, TextMate scopes, and source-to-virtual-CSS mapping. `yarn test:integration` starts an Extension Development Host and verifies completion in JavaScript, JSX, TypeScript, TSX, CSS props, supported next-yak template forms, pseudo selectors, virtual documents, cancellation, and a large-document baseline. `yarn verify` runs both test layers, the type check, and creates a standalone VSIX. CSS language-service and TypeScript parser dependencies are bundled into `dist/extension.cjs`; the packaged extension only needs the VS Code extension host's `vscode` API at runtime.
 
 ## Current Scope
 
-Completion detects direct, aliased, and namespace imports from `next-yak` through the TypeScript AST, and ignores locally shadowed identifiers. Syntax highlighting remains TextMate-pattern based, so a visually highlighted template is not itself proof that its binding comes from `next-yak`.
+Completion detects direct, aliased, and namespace imports from `next-yak` through the TypeScript AST, ignores type-only imports and locally shadowed identifiers, and supports static string element access such as `styled['div']`. Dynamic tag expressions are intentionally ignored. Syntax highlighting remains TextMate-pattern based, so a visually highlighted template is not itself proof that its binding comes from `next-yak`.
 
 `publisher` is currently `local` for VSIX testing. Register a Marketplace publisher and update that field before publishing to the Visual Studio Marketplace.

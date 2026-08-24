@@ -27,7 +27,7 @@
     "build": "tsdown",
     "check": "tsc --noEmit",
     "test": "vitest run",
-    "test:integration": "yarn build && node ./test/runExtensionTests.cjs",
+    "test:integration": "yarn build && node ./test/runExtensionTests.mjs",
     "verify": "yarn check && yarn test && yarn test:integration && yarn package",
     "vscode:prepublish": "yarn build",
     "package": "yarn vsce package --no-yarn --no-dependencies --out ./next-yak-vscode-${npm_package_version}.vsix"

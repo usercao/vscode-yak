@@ -38,26 +38,24 @@
 - [x] 已使用 Vitest 覆盖模板定位、别名、命名空间、遮蔽、插值和位置映射等纯函数行为。
 - [x] 已使用 `@vscode/test-electron` 覆盖真实 TSX 文档中的属性、伪类、伪元素、别名、命名空间和遮蔽补全行为。
 - [x] 已将 `yarn verify` 配置为类型检查、单元测试、Extension Host 测试和 VSIX 打包的全链路门禁。
+- [x] 已为 JavaScript、JSX、TypeScript 和 TSX 四种宿主语言运行真实 Extension Host 属性补全回归测试。
+- [x] 已为 `globalStyle`、`keyframes`、`styled(Component)`、`.attrs(...)` 和静态字符串 element access 运行真实 Extension Host 补全回归测试。
+- [x] 已为 `css={css\`...\`}` 形式的 CSS prop、多个/相邻模板及嵌套 CSS 模板运行定位与补全回归测试。
+- [x] 已为未闭合反引号、未闭合插值、语法错误 TSX 和不完整 CSS 添加不崩溃且范围安全的回归测试。
+- [x] 已为未知属性、CSS value、媒体查询、自定义属性、复杂选择器和嵌套 selector 添加伪类回退正反例测试。
+- [x] 已为单行 insert/replace range、snippet tab stop、跨多行模板映射及虚拟包装区/越界范围拒绝添加精确测试。
+- [x] 已定义并测试 `import type`、重复 import、冲突 import 和无效 import 的识别行为。
+- [x] 已决定支持静态字符串 element access，并拒绝动态 element access、动态 tag 名和无法静态解析的 wrapper 表达式。
+- [x] 已为未保存 `untitled:`、只读内容提供器和远程式 URI 运行补全定位回归测试。
+- [x] 已为已取消请求和 80 个 tagged template 上的连续补全请求建立 Extension Host 回归与 5 秒宽松延迟预算。
+- [x] 已为 TextMate grammar 的静态误命中建立已知限制测试，避免将高亮 scope 误当作 AST 语义判断。
 
 ### 尚未完成
 
-- [ ] 为 JavaScript、JSX、TypeScript 和 TSX 四种宿主语言分别增加真实 Extension Host 补全回归测试。
-- [ ] 为 `globalStyle`、`keyframes`、`styled(Component)` 和 `.attrs(...)` 分别增加真实 Extension Host 补全回归测试。
-- [ ] 为 `css={css\`...\`}` 形式的 CSS prop 添加模板识别与补全回归测试。
-- [ ] 为同一文件中的多个 next-yak 模板、嵌套模板和相邻模板添加范围定位回归测试。
-- [ ] 为未闭合反引号、未闭合插值、语法错误 TSX 和不完整 CSS 添加不崩溃且不产生错误替换范围的回归测试。
-- [ ] 为选择器伪类回退添加未知属性、CSS value、媒体查询、自定义属性和复杂选择器的反例测试。
-- [ ] 为补全项的 insert range、replace range、snippet tab stop 和多行 text edit 添加精确范围测试。
-- [ ] 为 `import type`、重复 import、冲突 import 和无效 import 语法定义并测试明确的识别行为。
-- [ ] 为字符串 element access 形式 `styled['div']\`...\`` 添加回归测试并决定是否公开承诺支持。
-- [ ] 为动态 element access、动态 tag 名和无法静态解析的 wrapper 表达式定义明确的拒绝策略和测试。
-- [ ] 为文件尚未保存、`untitled:` URI、只读文档和远程工作区 URI 添加补全定位回归测试。
-- [ ] 为大文件和连续输入中的取消请求定义性能目标并验证 provider 能及时停止过期计算。
 - [ ] 按文档 URI 与版本缓存 SourceFile、TypeChecker 或可复用绑定信息以避免每次补全都创建 TypeScript Program。
 - [ ] 为 AST 缓存失效、文档修改和文档关闭建立回归测试以避免使用过期 import binding。
 - [ ] 评估并记录 `typescript` compiler API 内联后约 8.9 MB bundle 的可接受预算与优化目标。
 - [ ] 在不降低绑定识别正确性的前提下评估延迟加载、精简 parser 或替代绑定解析方案以缩小激活成本。
-- [ ] 为 TextMate 高亮的静态误命中建立已知限制测试，避免把高亮 scope 误当作补全的语义判断来源。
 
 ## P1：核心 CSS 语言体验
 

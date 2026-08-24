@@ -1,0 +1,413 @@
+import assert from 'node:assert/strict'
+import * as vscode from 'vscode'
+
+const cursorMarker = '/*cursor*/'
+const nextYakSortPrefix = '!'
+
+function completionLabel(item) {
+  return typeof item.label === 'string' ? item.label : item.label.label
+}
+
+function completionInsertText(item) {
+  return typeof item.insertText === 'string' ? item.insertText : item.insertText?.value
+}
+
+function nextYakItems(items) {
+  return items.filter((item) => item.sortText?.startsWith(nextYakSortPrefix))
+}
+
+function findNextYakItem(items, label) {
+  return nextYakItems(items).find((item) => completionLabel(item) === label)
+}
+
+function assertRangeWithinDocument(document, item) {
+  assert.ok(item.range instanceof vscode.Range, `Expected ${completionLabel(item)} to define a replacement range`)
+
+  const start = document.offsetAt(item.range.start)
+  const end = document.offsetAt(item.range.end)
+
+  assert.ok(start >= 0, `Expected ${completionLabel(item)} range to start inside the document`)
+  assert.ok(end >= start, `Expected ${completionLabel(item)} range to be ordered`)
+  assert.ok(end <= document.getText().length, `Expected ${completionLabel(item)} range to end inside the document`)
+}
+
+async function completionItems({ language = 'typescriptreact', source, uri }) {
+  const cursorOffset = source.indexOf(cursorMarker)
+
+  assert.notEqual(cursorOffset, -1, `Missing ${cursorMarker} marker`)
+
+  let document = uri
+    ? await vscode.workspace.openTextDocument(uri)
+    : await vscode.workspace.openTextDocument({
+      language,
+      content: source.replace(cursorMarker, ''),
+    })
+
+  if (document.languageId !== language) {
+    document = await vscode.languages.setTextDocumentLanguage(document, language)
+  }
+
+  await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true })
+
+  const completionList = await vscode.commands.executeCommand(
+    'vscode.executeCompletionItemProvider',
+    document.uri,
+    document.positionAt(cursorOffset),
+  )
+
+  return { document, items: completionList?.items ?? [] }
+}
+
+function styledSource(prefix = 'col', tagExpression = 'styled.div', importStatement = "import { styled } from 'next-yak'") {
+  return [
+    importStatement,
+    `const Panel = ${tagExpression}\``,
+    `  ${prefix}${cursorMarker}`,
+    '`',
+  ].join('\n')
+}
+
+async function assertPropertyCompletion(options = {}) {
+  const { expectedLabel = 'color', ...completionOptions } = options
+  const { document, items } = await completionItems(completionOptions)
+  const item = findNextYakItem(items, expectedLabel)
+
+  assert.ok(item, `Expected next-yak ${expectedLabel} completion in ${nextYakItems(items).map(completionLabel).join(', ')}`)
+  assertRangeWithinDocument(document, item)
+  return { document, item, items }
+}
+
+async function assertPseudoCompletion(selector, expectedLabel, expectedInsertText) {
+  const { document, items } = await completionItems({
+    source: [
+      "import { styled } from 'next-yak'",
+      'const Link = styled.a`',
+      `  ${selector}${cursorMarker}`,
+      '`',
+    ].join('\n'),
+  })
+  const item = findNextYakItem(items, expectedLabel)
+
+  assert.ok(item, `Expected ${expectedLabel} in ${nextYakItems(items).map(completionLabel).join(', ')}`)
+  assertRangeWithinDocument(document, item)
+  assert.equal(document.getText(item.range), selector)
+  assert.equal(item.filterText, expectedInsertText)
+  assert.equal(completionInsertText(item), expectedInsertText)
+}
+
+async function assertNoPseudoFallback(source) {
+  const { items } = await completionItems({ source })
+  const pseudoLabels = nextYakItems(items)
+    .map(completionLabel)
+    .filter((label) => label.startsWith(':'))
+
+  assert.deepEqual(pseudoLabels, [], `Expected no next-yak pseudo fallback, received ${pseudoLabels.join(', ')}`)
+}
+
+async function runCase(name, callback) {
+  try {
+    await callback()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`${name}: ${message}`, { cause: error })
+  }
+}
+
+async function createDirectProvider() {
+  const module = await import(new URL('../../dist/extension.cjs', import.meta.url))
+  const Provider = module.NextYakCssCompletionProvider ?? module.default?.NextYakCssCompletionProvider
+
+  assert.ok(Provider, 'Expected the extension bundle to export NextYakCssCompletionProvider')
+  return new Provider()
+}
+
+function cancellationToken(cancelOnCheck) {
+  let checks = 0
+
+  return {
+    get isCancellationRequested() {
+      checks += 1
+      return checks >= cancelOnCheck
+    },
+    onCancellationRequested: () => new vscode.Disposable(() => {}),
+  }
+}
+
+const neverCancelledToken = {
+  isCancellationRequested: false,
+  onCancellationRequested: () => new vscode.Disposable(() => {}),
+}
+
+async function directProviderRequest(provider, source, language = 'typescriptreact') {
+  const cursorOffset = source.indexOf(cursorMarker)
+
+  assert.notEqual(cursorOffset, -1, `Missing ${cursorMarker} marker`)
+
+  const document = await vscode.workspace.openTextDocument({
+    language,
+    content: source.replace(cursorMarker, ''),
+  })
+
+  return {
+    document,
+    position: document.positionAt(cursorOffset),
+  }
+}
+
+export async function run() {
+  const extension = vscode.extensions.getExtension('local.next-yak-vscode')
+
+  assert.ok(extension, 'The next-yak extension should be available in the Extension Development Host')
+  await extension.activate()
+
+  await runCase('completes CSS properties in every supported host language', async () => {
+    for (const language of ['javascript', 'javascriptreact', 'typescript', 'typescriptreact']) {
+      await assertPropertyCompletion({ language, source: styledSource() })
+    }
+  })
+
+  await runCase('completes supported next-yak tagged template forms', async () => {
+    await assertPropertyCompletion({
+      source: [
+        "import { globalStyle } from 'next-yak'",
+        'globalStyle`',
+        `  col${cursorMarker}`,
+        '`',
+      ].join('\n'),
+    })
+    await assertPropertyCompletion({
+      source: [
+        "import { keyframes } from 'next-yak'",
+        'const fade = keyframes`',
+        '  from {',
+        `    op${cursorMarker}`,
+        '  }',
+        '`',
+      ].join('\n'),
+      expectedLabel: 'opacity',
+    })
+    await assertPropertyCompletion({
+      source: [
+        "import { styled } from 'next-yak'",
+        'const Component = () => null',
+        'const Panel = styled(Component)`',
+        `  col${cursorMarker}`,
+        '`',
+      ].join('\n'),
+    })
+    await assertPropertyCompletion({ source: styledSource('col', 'styled.div.attrs({})') })
+    await assertPropertyCompletion({ source: styledSource('col', "styled['div']") })
+  })
+
+  await runCase('completes CSS prop and nearest nested templates', async () => {
+    await assertPropertyCompletion({
+      source: [
+        "import { css } from 'next-yak'",
+        'const view = <section css={css`',
+        `  col${cursorMarker}`,
+        '`} />',
+      ].join('\n'),
+    })
+
+    const { document, item } = await assertPropertyCompletion({
+      source: [
+        "import { css, styled } from 'next-yak'",
+        'const Panel = styled.div`',
+        '  ${({ active }) => active && css`',
+        `    col${cursorMarker}`,
+        '  `}',
+        '`',
+      ].join('\n'),
+    })
+    assert.equal(document.getText(item.range), 'col')
+  })
+
+  await runCase('maps replacement ranges and snippets inside multiline templates', async () => {
+    const replacement = await assertPropertyCompletion({
+      source: [
+        "import { styled } from 'next-yak'",
+        'const Panel = styled.div`',
+        '  display: grid;',
+        `  col${cursorMarker}`,
+        '`',
+      ].join('\n'),
+    })
+    assert.equal(replacement.document.getText(replacement.item.range), 'col')
+    assert.equal(replacement.item.range.start.line, 3)
+    assert.equal(replacement.item.range.end.line, 3)
+    assert.equal(completionInsertText(replacement.item), 'color: $0;')
+
+    const insertion = await assertPropertyCompletion({ source: styledSource('') })
+    assert.equal(insertion.document.getText(insertion.item.range), '')
+    assert.ok(insertion.item.range.isEmpty, 'Expected an insertion range at an empty CSS position')
+
+    const value = await assertPropertyCompletion({
+      source: styledSource('animation: '),
+      expectedLabel: 'steps()',
+    })
+    assert.equal(value.document.getText(value.item.range), '')
+    assert.equal(completionInsertText(value.item), 'steps($1)')
+  })
+
+  await runCase('returns pseudo selectors with complete replacement text', async () => {
+    await assertPseudoCompletion('a:', ':hover', 'a:hover')
+    await assertPseudoCompletion('a:ho', ':hover', 'a:hover')
+    await assertPseudoCompletion('a::', '::before', 'a::before')
+    await assertPseudoCompletion('.link:ho', ':hover', '.link:hover')
+    await assertPseudoCompletion('&:fo', ':focus', '&:focus')
+  })
+
+  await runCase('does not use pseudo fallback in declaration and at-rule contexts', async () => {
+    const sourceForLine = (line) => [
+      "import { styled } from 'next-yak'",
+      'const Panel = styled.div`',
+      `  ${line}${cursorMarker}`,
+      '`',
+    ].join('\n')
+
+    await assertNoPseudoFallback(sourceForLine('unknown: value'))
+    await assertNoPseudoFallback(sourceForLine('color: re'))
+    await assertNoPseudoFallback(sourceForLine('@media '))
+    await assertNoPseudoFallback(sourceForLine('--accent:'))
+  })
+
+  await runCase('rejects type-only, locally shadowed, and dynamic next-yak tags', async () => {
+    for (const source of [
+      styledSource('col', 'styled.div', "import type { styled } from 'next-yak'"),
+      [
+        "import { styled } from 'next-yak'",
+        'function create(styled) {',
+        '  return styled.a`',
+        `    col${cursorMarker}`,
+        '  `',
+        '}',
+      ].join('\n'),
+      [
+        "import { styled } from 'next-yak'",
+        "const tagName = 'div'",
+        'const Panel = styled[tagName]`',
+        `  col${cursorMarker}`,
+        '`',
+      ].join('\n'),
+      [
+        'const styled = createFactory()',
+        'const Panel = styled.div`',
+        `  col${cursorMarker}`,
+        '`',
+      ].join('\n'),
+    ]) {
+      const { items } = await completionItems({ source })
+      assert.equal(
+        nextYakItems(items).length,
+        0,
+        `Expected no next-yak completion for an unsupported tag binding; received ${nextYakItems(items).map(completionLabel).join(', ')}`,
+      )
+    }
+  })
+
+  await runCase('keeps completion ranges safe for incomplete templates and syntax errors', async () => {
+    const incompleteTemplate = await assertPropertyCompletion({
+      source: [
+        "import { styled } from 'next-yak'",
+        'const Panel = styled.div`',
+        `  col${cursorMarker}`,
+      ].join('\n'),
+    })
+    assertRangeWithinDocument(incompleteTemplate.document, incompleteTemplate.item)
+
+    const malformedTsx = await assertPropertyCompletion({
+      source: [
+        "import { styled } from 'next-yak'",
+        'const view = <section>',
+        '  {styled.div`',
+        `    col${cursorMarker}`,
+        '  `}',
+      ].join('\n'),
+    })
+    assertRangeWithinDocument(malformedTsx.document, malformedTsx.item)
+
+    const interpolation = await completionItems({
+      source: [
+        "import { styled } from 'next-yak'",
+        'const Panel = styled.div`',
+        `  color: \${({ theme }) => theme.${cursorMarker}`,
+      ].join('\n'),
+    })
+    assert.equal(
+      nextYakItems(interpolation.items).length,
+      0,
+      `Expected interpolation completion to remain with the host language service; received ${nextYakItems(interpolation.items).map(completionLabel).join(', ')}`,
+    )
+  })
+
+  await runCase('works for unsaved and virtual read-only remote-style documents', async () => {
+    const unsaved = await assertPropertyCompletion({ source: styledSource() })
+    assert.equal(unsaved.document.uri.scheme, 'untitled')
+    assert.equal(unsaved.document.isUntitled, true)
+
+    const scheme = 'next-yak-test'
+    const virtualSource = styledSource().replace(cursorMarker, '')
+    const provider = vscode.workspace.registerTextDocumentContentProvider(scheme, {
+      provideTextDocumentContent: () => virtualSource,
+    })
+
+    try {
+      for (const uri of [
+        vscode.Uri.parse(`${scheme}://readonly/Panel.tsx`),
+        vscode.Uri.from({ scheme, authority: 'ssh-remote+fixture', path: '/workspace/Panel.tsx' }),
+      ]) {
+        const { document, item } = await assertPropertyCompletion({
+          source: styledSource(),
+          uri,
+        })
+        assert.equal(document.isUntitled, false)
+        assert.equal(document.isDirty, false)
+        assertRangeWithinDocument(document, item)
+      }
+    } finally {
+      provider.dispose()
+    }
+  })
+
+  await runCase('stops cancelled completion work before and after CSS computation', async () => {
+    const provider = await createDirectProvider()
+    const request = await directProviderRequest(provider, styledSource())
+
+    assert.equal(
+      provider.provideCompletionItems(request.document, request.position, cancellationToken(1)),
+      undefined,
+      'Expected an already cancelled request to return immediately',
+    )
+    assert.equal(
+      provider.provideCompletionItems(request.document, request.position, cancellationToken(2)),
+      undefined,
+      'Expected a request cancelled after CSS computation to discard stale items',
+    )
+  })
+
+  await runCase('keeps a large document responsive during continuous completion requests', async () => {
+    const provider = await createDirectProvider()
+    const templateCount = 80
+    const source = [
+      "import { styled } from 'next-yak'",
+      ...Array.from({ length: templateCount }, (_, index) => `const Panel${index} = styled.div\`color: red;\``),
+      'const Current = styled.div`',
+      `  col${cursorMarker}`,
+      '`',
+    ].join('\n')
+    const startedAt = performance.now()
+
+    for (const prefix of ['c', 'co', 'col', 'colo', 'color']) {
+      const request = await directProviderRequest(provider, source.replace('col/*cursor*/', `${prefix}/*cursor*/`))
+      const result = provider.provideCompletionItems(request.document, request.position, neverCancelledToken)
+
+      assert.ok(result?.items.some((item) => completionLabel(item) === 'color'), `Expected color during continuous input at ${prefix}`)
+    }
+
+    const elapsedMilliseconds = performance.now() - startedAt
+    assert.ok(
+      elapsedMilliseconds < 5_000,
+      `Expected five completion requests across ${templateCount} templates to finish under 5000ms; took ${elapsedMilliseconds.toFixed(1)}ms`,
+    )
+  })
+}
