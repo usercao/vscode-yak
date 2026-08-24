@@ -81,7 +81,7 @@ class NextYakCssCompletionProvider implements vscode.CompletionItemProvider {
       return completion ? [completion] : []
     })
 
-    return new vscode.CompletionList(items, completions.isIncomplete)
+    return new vscode.CompletionList(items, true)
   }
 }
 
@@ -302,15 +302,23 @@ function toCompletionItem(
 
     completion.range = range
     completion.insertText = toInsertText(textEdit.newText, item.insertTextFormat)
+    const replacementText = document.getText(range)
+    const filterText = item.filterText ?? item.label
+
+    completion.filterText = filterText
+      .toLowerCase()
+      .startsWith(replacementText.toLowerCase())
+      ? replacementText
+      : item.filterText
   } else if (item.insertText) {
     completion.insertText = toInsertText(item.insertText, item.insertTextFormat)
   }
 
   completion.detail = item.detail
   completion.documentation = toDocumentation(item.documentation)
-  completion.filterText = item.filterText
+  completion.filterText ??= item.filterText
   completion.preselect = item.preselect
-  completion.sortText = item.sortText
+  completion.sortText = `!${item.sortText ?? item.label}`
 
   if (item.tags?.includes(1)) {
     completion.tags = [vscode.CompletionItemTag.Deprecated]
