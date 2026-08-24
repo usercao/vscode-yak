@@ -7,6 +7,7 @@ src/**
 test/**
 tsconfig.json
 tsdown.config.ts
+tsdown.tests.config.ts
 *.vsix
 .yarn/*
 yarn.lock

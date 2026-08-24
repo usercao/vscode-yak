@@ -67,7 +67,15 @@ yarn build
 yarn verify
 ```
 
-`yarn test` runs ESM Vitest coverage for template detection, import semantics, interpolation masking, TextMate scopes, and source-to-virtual-CSS mapping. `yarn test:integration` starts an Extension Development Host and verifies completion in JavaScript, JSX, TypeScript, TSX, CSS props, supported next-yak template forms, pseudo selectors, virtual documents, cancellation, and a large-document baseline. `yarn verify` runs both test layers, the type check, and creates a standalone VSIX. CSS language-service and TypeScript parser dependencies are bundled into `dist/extension.cjs`; the packaged extension only needs the VS Code extension host's `vscode` API at runtime.
+`yarn test` runs ESM Vitest coverage for template detection, import semantics, interpolation masking, TextMate scopes, and source-to-virtual-CSS mapping. `yarn test:integration` starts an Extension Development Host and verifies completion in JavaScript, JSX, TypeScript, TSX, CSS props, supported next-yak template forms, pseudo selectors, virtual documents, cancellation, and a large-document baseline. All test source files use TypeScript; the CJS entry point required by the VS Code Extension Host is generated under `.vscode-test/compiled` immediately before integration tests run. `yarn verify` runs both test layers, the type check, and creates a standalone VSIX. CSS language-service and TypeScript parser dependencies are bundled into `dist/extension.cjs`; the packaged extension only needs the VS Code extension host's `vscode` API at runtime.
+
+## TypeScript-First Development
+
+**TypeScript is the default for every authored executable source file in this project, including extension code, tests, test runners, and build configuration.** Use `.ts` for new executable source unless an external runtime interface makes TypeScript infeasible or materially impractical. Any such exception must document the runtime constraint.
+
+Generated artifacts may use CJS or ESM when a consumer requires those formats, but they are not maintained by hand. For example, [tsdown.tests.config.ts](tsdown.tests.config.ts) compiles the TypeScript Extension Host test entry into `.vscode-test/compiled/integration/extensionHost.cjs`, because VS Code loads `--extensionTestsPath` through its CommonJS-compatible test API.
+
+The sole authored JavaScript-family fixture is [test-workspace/next-yak-example.jsx](test-workspace/next-yak-example.jsx). It deliberately remains JSX so the Extension Development Host can exercise the JavaScript/JSX language surface supported by this extension; it is test data rather than extension or test-runner implementation.
 
 ## Current Scope
 

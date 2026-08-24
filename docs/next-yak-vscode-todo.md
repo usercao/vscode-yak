@@ -6,6 +6,14 @@
 >
 > 每个勾选项只描述一个可验证的工作结果，以便在实现后直接勾选而不混淆范围。
 
+## 开发约定：TypeScript 优先
+
+**项目中所有手写的可执行源码，包含扩展实现、测试、测试启动器与构建配置，默认均使用 TypeScript。** 只有外部运行时接口确实无法使用 TypeScript，或使用 TypeScript 会造成明显不合理的实现负担时，才可使用 `.js`、`.cjs` 或 `.mjs`；此类例外必须在相邻文档中说明运行时约束。
+
+由构建工具生成的 CJS 或 ESM 产物不属于手写源码。例如，VS Code Extension Host 所需的 `.vscode-test/compiled/integration/extensionHost.cjs` 由 TypeScript 测试入口经 `tsdown.tests.config.ts` 生成，不在仓库中手工维护。
+
+当前唯一的手写 JavaScript-family 文件是 `test-workspace/next-yak-example.jsx`，它是验证扩展 JavaScript/JSX 宿主语言支持的 fixture，而不是扩展、测试或构建逻辑；因此保留 JSX 语法。
+
 ## 优先级约定
 
 - **P0**：正确性、回归防护和稳定发布所需的基础能力。
