@@ -1,9 +1,4 @@
-type StyleTag = (strings: TemplateStringsArray, ...interpolations: unknown[]) => unknown
-
-declare const styled: Record<string, StyleTag> & ((component: unknown) => StyleTag)
-declare const css: StyleTag
-declare const globalStyle: StyleTag
-declare const keyframes: StyleTag
+import { css, globalStyle, keyframes, styled } from 'next-yak'
 
 const accent = 'rebeccapurple'
 
@@ -11,7 +6,11 @@ export const Header = styled.header`
   display: grid;
   grid-template-columns: 1fr auto;
   color: ${accent};
-  col
+`
+
+export const Link = styled.a`
+  a:
+  a::
 `
 
 export const responsiveRules = css`

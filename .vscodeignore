@@ -4,6 +4,7 @@
 .yarnrc.yml
 docs/**
 src/**
+test/**
 tsconfig.json
 tsdown.config.ts
 *.vsix

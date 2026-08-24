@@ -26,7 +26,9 @@
   "scripts": {
     "build": "tsdown",
     "check": "tsc --noEmit",
-    "verify": "yarn check && yarn package",
+    "test": "vitest run",
+    "test:integration": "yarn build && node ./test/runExtensionTests.cjs",
+    "verify": "yarn check && yarn test && yarn test:integration && yarn package",
     "vscode:prepublish": "yarn build",
     "package": "yarn vsce package --no-yarn --no-dependencies --out ./next-yak-vscode-${npm_package_version}.vsix"
   },
@@ -37,9 +39,11 @@
   "devDependencies": {
     "@types/node": "^24",
     "@types/vscode": "^1.134.0",
+    "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "3.9.2",
     "tsdown": "^0.22.14",
-    "typescript": "~6.0.2"
+    "typescript": "~6.0.2",
+    "vitest": "^4.1.11"
   },
   "contributes": {
     "grammars": [

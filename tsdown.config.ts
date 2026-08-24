@@ -14,7 +14,7 @@ export default defineConfig({
     'vscode-languageserver-textdocument': textDocumentEsmEntry,
   },
   deps: {
-    alwaysBundle: ['vscode-css-languageservice', 'vscode-languageserver-textdocument'],
+    alwaysBundle: ['typescript', 'vscode-css-languageservice', 'vscode-languageserver-textdocument'],
     neverBundle: ['vscode'],
   },
   entry: ['src/extension.ts'],

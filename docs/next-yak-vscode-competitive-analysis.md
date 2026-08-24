@@ -10,7 +10,7 @@
 
 ## 结论
 
-当前扩展已完成一个可用的 MVP：在 TS、TSX、JS、JSX 的标准 next-yak tagged template 中提供 CSS 高亮、静态 CSS 补全，并把 `${...}` 内交还给 JavaScript/TypeScript。
+当前扩展已完成一个可用的 MVP：在 TS、TSX、JS、JSX 的 next-yak tagged template 中提供 CSS 高亮、静态 CSS 补全、伪类/伪元素补全，并把 `${...}` 内交还给 JavaScript/TypeScript。P0 的语义识别与测试基础设施已经实现。
 
 与两个参照项目相比，主要缺口是语义识别、完整语言功能与测试，不是必须把模板语言改成 SCSS 或 Less。
 
@@ -37,19 +37,20 @@
 当前仓库的实际实现集中在 [`src/extension.ts`](../src/extension.ts) 与 [`package.json`](../package.json)：
 
 - 对 TypeScript、TSX、JavaScript、JSX 注入 CSS TextMate grammar。
-- 识别 `styled.tag`、简单 `styled(Component)`、`css`、`globalStyle`、`keyframes`。
+- 使用 TypeScript AST 确认直接、别名和命名空间 `next-yak` import；识别 `styled.tag`、`styled(Component)`、类型参数、`.attrs(...)`、`css`、`globalStyle`、`keyframes`，并排除局部遮蔽。
 - 将静态模板文本包装为虚拟 CSS 文档，使用 `vscode-css-languageservice` 提供属性、值、函数、at-rule 与自定义属性补全。
 - 屏蔽 `${...}` 后保持 offset 对齐；插值位置返回 `undefined`，交由原生 TS/JS 补全处理。
 - 将 CSS 候选优先排序，降低 TSX 中 Emmet JSX 候选遮挡 CSS 属性的影响。
+- 对 `a:`、`a::` 等根级选择器上下文补充伪类和伪元素候选，规避虚拟 `:root` 包装被 CSS Language Service 误判为不完整声明的问题。
 
-当前限制同样是实际行为：模板通过文本模式识别，不检查导入来源；不支持别名、命名空间导入和复杂 `styled(...)` 链；没有 hover、诊断、代码操作、颜色 provider 或自动化测试。
+当前限制同样是实际行为：TextMate 高亮仍通过静态模式识别，不能证明导入来源；补全尚未做跨文件符号解析；没有 hover、诊断、代码操作或颜色 provider。已具备 Vitest 单元测试和 `@vscode/test-electron` Extension Host 集成测试。
 
 ## 功能对比
 
 | 能力 | 当前项目 | `vscode-styled-components` + `typescript-styled-plugin` | 差距与建议 |
 | --- | --- | --- | --- |
 | CSS 高亮 | 已有 next-yak 专用注入 grammar。 | 有更成熟的 styled-components grammar，覆盖许多历史 template 形式。 | 保持 next-yak 专用识别；补齐 next-yak 的泛型、`.attrs`、`css` prop 等真实 API 形式。 |
-| 模板识别 | 基于正则和固定 tag 名。 | TypeScript plugin 也以可配置 tag 名为中心，但可通过 tsserver 装饰器接入语言服务。 | 高优先级：使用 TypeScript AST 验证 `next-yak` 导入，支持别名与命名空间导入，并排除局部遮蔽。 |
+| 模板识别 | 已使用 TypeScript AST 验证 `next-yak` import，支持别名、命名空间、常见 styled 链并排除局部遮蔽。 | TypeScript plugin 也以可配置 tag 名为中心，但可通过 tsserver 装饰器接入语言服务。 | 后续扩展跨文件符号解析与 next-yak 的更多 API 形态。 |
 | CSS 属性和值补全 | 已有，仅处理静态 CSS 位置。 | 有 CSS、SCSS、Emmet 候选合并，随 tsserver 提供给 TS/JS。 | 已达到 MVP；后续加入 next-yak 的模板形态和用户自定义 CSS 数据即可。 |
 | Hover | 未实现。 | TypeScript plugin 调用 SCSS language service 的 hover。 | 高价值：复用已有虚拟文档与位置映射实现 CSS hover。 |
 | CSS 诊断 | 未实现。 | 有语法/规则诊断，并把结果映射回 TS/JS 源文件。 | 高价值：提供 CSS 语法错误、未知属性等诊断；需要避免在 `${...}` 附近报误报。 |
@@ -59,20 +60,20 @@
 | 输入辅助 | 无。 | 提供展开模板的 snippet，以及接受属性后插入 `: ;` 的命令。 | 可选体验增强；不要为了模仿而破坏 VS Code 的默认 Enter 行为。 |
 | 配置 | tag 名和行为目前硬编码。 | 可配置 tags、lint、Emmet 选项。 | 中优先级：提供 next-yak 标签别名和自定义 CSS 数据配置；lint 规则应先采用 CSS language service 的能力。 |
 | Emmet | 受 VS Code 对整个 TSX 文档语言的限制；CSS 项已优先排序。 | 自带 Emmet helper 合并，README 也承认存在 VS Code/TypeScript 上游限制。 | 不要用全局禁用 TSX Emmet 解决局部问题；保留现有 CSS 候选优先策略。 |
-| 自动化测试 | 当前没有项目测试。 | 有单元测试和端到端测试，覆盖补全、错误、快速修复、Emmet、outline；VS Code 扩展也有 grammar/颜色测试。 | 最高优先级基础工作：提取纯函数并覆盖模板定位、插值、位置映射和 VS Code 集成行为。 |
+| 自动化测试 | 已有 Vitest 单元测试和 `@vscode/test-electron` 集成测试，覆盖模板定位、插值、位置映射、别名、命名空间、遮蔽及伪类/伪元素补全。 | 有单元测试和端到端测试，覆盖补全、错误、快速修复、Emmet、outline；VS Code 扩展也有 grammar/颜色测试。 | 扩展到 hover、诊断、代码操作、颜色和 grammar token 场景。 |
 | 维护状态 | 本项目可按 next-yak 的当前版本演进。 | VS Code styled-components 仓库官方说明自 2024-06 起不再由团队维护；TypeScript plugin 默认分支的最近提交也较旧。 | 学习架构和测试策略，不应无审查地复制旧依赖、旧 grammar 或历史 API。 |
 
 ## 推荐实施顺序
 
-### P0：识别正确性与可测试性
+### P0：识别正确性与可测试性（已完成）
 
-1. 将模板定位、插值扫描、虚拟文档创建、位置映射拆为无 VS Code 运行时依赖的纯函数。
-2. 引入 TypeScript AST，确认绑定来自 `next-yak`，并支持：
+1. 已将模板定位、插值扫描、虚拟文档文本创建、位置映射拆为无 VS Code 运行时依赖的纯函数。
+2. 已引入 TypeScript AST，确认绑定来自 `next-yak`，并支持：
    - `import { styled as s } from 'next-yak'`
    - `import * as yak from 'next-yak'`
    - `s.div`、`yak.css`、`styled(Component)` 的真实变体
    - 类型参数与 `.attrs` 等 next-yak 支持的 styled 链
-3. 为上述规则和多行/嵌套插值写单元测试；再通过 `@vscode/test-electron` 覆盖 TSX 真实补全行为。
+3. 已为上述规则和多行/嵌套插值编写单元测试，并通过 `@vscode/test-electron` 覆盖 TSX 中的真实补全行为。
 
 这是最重要的一步。若识别范围错误，后续 hover、诊断和快速修复都会在非 next-yak 模板中产生噪声。
 

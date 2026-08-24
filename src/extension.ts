@@ -1,12 +1,24 @@
 import * as vscode from 'vscode'
 import {
+  getDefaultCSSDataProvider,
   getCSSLanguageService,
   type CompletionItem as CssCompletionItem,
   type Range as CssRange,
 } from 'vscode-css-languageservice'
 import { TextDocument } from 'vscode-languageserver-textdocument'
+import {
+  createVirtualCssText,
+  findNextYakTemplate,
+  getSelectorCompletionContext,
+  mapVirtualRangeToSourceOffsets,
+  type NextYakTemplate,
+  type SelectorCompletionContext,
+} from './nextYakTemplate'
 
 const cssLanguageService = getCSSLanguageService()
+const cssPropertyNames = new Set(
+  getDefaultCSSDataProvider().provideProperties().map((property) => property.name),
+)
 const nextYakDocumentSelector: vscode.DocumentSelector = [
   { language: 'javascript' },
   { language: 'javascriptreact' },
@@ -14,25 +26,12 @@ const nextYakDocumentSelector: vscode.DocumentSelector = [
   { language: 'typescriptreact' },
 ]
 const cssCompletionTriggerCharacters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ:-@'.split('')
-const taggedTemplatePattern =
-  /\b(styled(?:\s*\.\s*[$A-Z_a-z][$\w]*|\s*\([^`()]*\))|css|globalStyle|keyframes)\s*`/g
-
-interface OffsetRange {
-  start: number
-  end: number
-}
-
-interface NextYakTemplate {
-  bodyEnd: number
-  bodyStart: number
-  interpolations: readonly OffsetRange[]
-  maskedBody: string
-  tag: string
-}
 
 interface VirtualCssDocument {
   document: TextDocument
   prefixLength: number
+  sourceLength: number
+  sourceStart: number
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -57,7 +56,7 @@ class NextYakCssCompletionProvider implements vscode.CompletionItemProvider {
 
     const source = document.getText()
     const cursorOffset = document.offsetAt(position)
-    const template = findNextYakTemplate(source, cursorOffset)
+    const template = findNextYakTemplate(source, cursorOffset, document.languageId, document.fileName)
 
     if (!template) {
       return undefined
@@ -77,214 +76,101 @@ class NextYakCssCompletionProvider implements vscode.CompletionItemProvider {
     }
 
     const items = completions.items.flatMap((item) => {
-      const completion = toCompletionItem(item, document, template, virtualCss)
+      const completion = toCompletionItem(item, document, virtualCss)
       return completion ? [completion] : []
     })
+    const existingLabels = new Set(items.map((item) => typeof item.label === 'string' ? item.label : item.label.label))
+    const selectorItems = getSelectorCompletionItems(
+      source,
+      cursorOffset,
+      document,
+      template,
+      existingLabels,
+    )
 
-    return new vscode.CompletionList(items, true)
+    return new vscode.CompletionList([...items, ...selectorItems], true)
   }
-}
-
-function findNextYakTemplate(source: string, cursorOffset: number): NextYakTemplate | undefined {
-  taggedTemplatePattern.lastIndex = 0
-
-  for (let match = taggedTemplatePattern.exec(source); match; match = taggedTemplatePattern.exec(source)) {
-    const tag = match[1]
-    const templateStart = match.index + match[0].lastIndexOf('`')
-    const bodyStart = templateStart + 1
-    const parsedTemplate = scanTemplate(source, bodyStart)
-
-    if (cursorOffset >= bodyStart && cursorOffset <= parsedTemplate.bodyEnd) {
-      const cursorInBody = cursorOffset - bodyStart
-
-      if (parsedTemplate.interpolations.some((range) => isOffsetInRange(cursorInBody, range))) {
-        return undefined
-      }
-
-      return {
-        bodyStart,
-        bodyEnd: parsedTemplate.bodyEnd,
-        interpolations: parsedTemplate.interpolations,
-        maskedBody: maskInterpolations(
-          source.slice(bodyStart, parsedTemplate.bodyEnd),
-          parsedTemplate.interpolations,
-        ),
-        tag,
-      }
-    }
-
-    if (parsedTemplate.bodyEnd >= source.length) {
-      return undefined
-    }
-
-    taggedTemplatePattern.lastIndex = parsedTemplate.bodyEnd + 1
-  }
-
-  return undefined
-}
-
-function scanTemplate(source: string, bodyStart: number) {
-  const interpolations: OffsetRange[] = []
-  let offset = bodyStart
-
-  while (offset < source.length) {
-    const character = source[offset]
-
-    if (character === '\\') {
-      offset += 2
-      continue
-    }
-
-    if (character === '`') {
-      return { bodyEnd: offset, interpolations }
-    }
-
-    if (character === '$' && source[offset + 1] === '{') {
-      const interpolationEnd = findInterpolationEnd(source, offset + 2)
-      const rangeEnd = interpolationEnd ?? source.length
-
-      interpolations.push({ start: offset - bodyStart, end: rangeEnd - bodyStart })
-
-      if (!interpolationEnd) {
-        return { bodyEnd: source.length, interpolations }
-      }
-
-      offset = interpolationEnd
-      continue
-    }
-
-    offset += 1
-  }
-
-  return { bodyEnd: source.length, interpolations }
-}
-
-function findInterpolationEnd(source: string, start: number): number | undefined {
-  let braceDepth = 1
-  let offset = start
-
-  while (offset < source.length) {
-    const character = source[offset]
-
-    if (character === "'" || character === '"') {
-      offset = skipQuotedString(source, offset, character)
-      continue
-    }
-
-    if (character === '`') {
-      offset = skipTemplateLiteral(source, offset)
-      continue
-    }
-
-    if (character === '/' && source[offset + 1] === '/') {
-      offset = skipLineComment(source, offset)
-      continue
-    }
-
-    if (character === '/' && source[offset + 1] === '*') {
-      offset = skipBlockComment(source, offset)
-      continue
-    }
-
-    if (character === '{') {
-      braceDepth += 1
-    } else if (character === '}') {
-      braceDepth -= 1
-
-      if (braceDepth === 0) {
-        return offset + 1
-      }
-    }
-
-    offset += 1
-  }
-
-  return undefined
-}
-
-function skipQuotedString(source: string, start: number, quote: string): number {
-  let offset = start + 1
-
-  while (offset < source.length) {
-    if (source[offset] === '\\') {
-      offset += 2
-    } else if (source[offset] === quote) {
-      return offset + 1
-    } else {
-      offset += 1
-    }
-  }
-
-  return source.length
-}
-
-function skipTemplateLiteral(source: string, start: number): number {
-  let offset = start + 1
-
-  while (offset < source.length) {
-    if (source[offset] === '\\') {
-      offset += 2
-    } else if (source[offset] === '`') {
-      return offset + 1
-    } else if (source[offset] === '$' && source[offset + 1] === '{') {
-      offset = findInterpolationEnd(source, offset + 2) ?? source.length
-    } else {
-      offset += 1
-    }
-  }
-
-  return source.length
-}
-
-function skipLineComment(source: string, start: number): number {
-  const lineEnd = source.indexOf('\n', start + 2)
-  return lineEnd === -1 ? source.length : lineEnd + 1
-}
-
-function skipBlockComment(source: string, start: number): number {
-  const commentEnd = source.indexOf('*/', start + 2)
-  return commentEnd === -1 ? source.length : commentEnd + 2
-}
-
-function isOffsetInRange(offset: number, range: OffsetRange) {
-  return offset >= range.start && offset < range.end
-}
-
-function maskInterpolations(templateBody: string, interpolations: readonly OffsetRange[]) {
-  let maskedBody = ''
-  let offset = 0
-
-  for (const interpolation of interpolations) {
-    maskedBody += templateBody.slice(offset, interpolation.start)
-    maskedBody += templateBody.slice(interpolation.start, interpolation.end).replace(/[^\r\n]/g, ' ')
-    offset = interpolation.end
-  }
-
-  return maskedBody + templateBody.slice(offset)
 }
 
 function createVirtualCssDocument(
   document: vscode.TextDocument,
   template: NextYakTemplate,
 ): VirtualCssDocument {
-  const prefix = template.tag === 'keyframes' ? '@keyframes next_yak_completion {\n' : ':root {\n'
-  const text = `${prefix}${template.maskedBody}\n}`
+  const virtualCssText = createVirtualCssText(template)
 
   return {
     document: TextDocument.create(
       `next-yak:${document.uri.toString()}?start=${template.bodyStart}`,
       'css',
       document.version,
-      text,
+      virtualCssText.text,
     ),
-    prefixLength: prefix.length,
+    prefixLength: virtualCssText.prefixLength,
+    sourceLength: template.maskedBody.length,
+    sourceStart: template.bodyStart,
+  }
+}
+
+function getSelectorCompletionItems(
+  source: string,
+  cursorOffset: number,
+  document: vscode.TextDocument,
+  template: NextYakTemplate,
+  existingLabels: ReadonlySet<string>,
+) {
+  const selectorContext = getSelectorCompletionContext(source, cursorOffset, template)
+
+  if (!selectorContext || !isSelectorCompletionContext(selectorContext)) {
+    return []
+  }
+
+  const selectorDocument = createSelectorDocument(document, selectorContext)
+  const stylesheet = cssLanguageService.parseStylesheet(selectorDocument.document)
+  const completions = cssLanguageService.doComplete(
+    selectorDocument.document,
+    selectorDocument.document.positionAt(selectorContext.text.length),
+    stylesheet,
+  )
+
+  return completions.items
+    .filter((item) => item.label.startsWith(':') && !existingLabels.has(item.label))
+    .flatMap((item) => {
+      const completion = toCompletionItem(item, document, selectorDocument)
+      return completion ? [completion] : []
+    })
+}
+
+function isSelectorCompletionContext(context: SelectorCompletionContext) {
+  const selector = context.text.trim()
+
+  if (selector.startsWith('@') || !/:{1,2}[-\w]*$/.test(selector)) {
+    return false
+  }
+
+  const selectorPrefix = selector.slice(0, selector.indexOf(':')).trim().toLowerCase()
+  return !selectorPrefix.startsWith('--') && !cssPropertyNames.has(selectorPrefix)
+}
+
+function createSelectorDocument(
+  document: vscode.TextDocument,
+  context: SelectorCompletionContext,
+): VirtualCssDocument {
+  return {
+    document: TextDocument.create(
+      `next-yak:${document.uri.toString()}?selector-start=${context.sourceStart}`,
+      'css',
+      document.version,
+      context.text,
+    ),
+    prefixLength: 0,
+    sourceLength: context.text.length,
+    sourceStart: context.sourceStart,
   }
 }
 
 function toCompletionItem(
   item: CssCompletionItem,
   document: vscode.TextDocument,
-  template: NextYakTemplate,
   virtualCss: VirtualCssDocument,
 ): vscode.CompletionItem | undefined {
   const completion = new vscode.CompletionItem(
@@ -294,7 +180,7 @@ function toCompletionItem(
   const textEdit = getTextEdit(item)
 
   if (textEdit) {
-    const range = toDocumentRange(textEdit.range, document, template, virtualCss)
+    const range = toDocumentRange(textEdit.range, document, virtualCss)
 
     if (!range) {
       return undefined
@@ -340,19 +226,23 @@ function getTextEdit(item: CssCompletionItem): { newText: string; range: CssRang
 function toDocumentRange(
   range: CssRange,
   document: vscode.TextDocument,
-  template: NextYakTemplate,
   virtualCss: VirtualCssDocument,
 ): vscode.Range | undefined {
-  const start = virtualCss.document.offsetAt(range.start) - virtualCss.prefixLength
-  const end = virtualCss.document.offsetAt(range.end) - virtualCss.prefixLength
+  const sourceRange = mapVirtualRangeToSourceOffsets(
+    virtualCss.document.offsetAt(range.start),
+    virtualCss.document.offsetAt(range.end),
+    virtualCss.prefixLength,
+    virtualCss.sourceStart,
+    virtualCss.sourceLength,
+  )
 
-  if (start < 0 || end < start || end > template.maskedBody.length) {
+  if (!sourceRange) {
     return undefined
   }
 
   return new vscode.Range(
-    document.positionAt(template.bodyStart + start),
-    document.positionAt(template.bodyStart + end),
+    document.positionAt(sourceRange.start),
+    document.positionAt(sourceRange.end),
   )
 }
 

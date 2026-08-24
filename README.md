@@ -6,7 +6,9 @@ CSS syntax highlighting and IntelliSense for `next-yak` tagged templates in VS C
 
 - Highlights CSS inside `styled`, `css`, `globalStyle`, and `keyframes` templates.
 - Offers CSS property, value, function, at-rule, and custom property completion.
+- Offers pseudo-class and pseudo-element completion for selector prefixes such as `a:` and `a::`.
 - Leaves `${...}` interpolations to the built-in JavaScript or TypeScript language service.
+- Resolves direct, aliased, and namespace `next-yak` imports before providing completion.
 - Supports TypeScript, TSX, JavaScript, and JSX files.
 
 Supported template forms:
@@ -59,14 +61,16 @@ The repository also contains `test-workspace/`, an isolated fixture that can be 
 
 ```sh
 yarn check
+yarn test
+yarn test:integration
 yarn build
 yarn verify
 ```
 
-`yarn verify` runs the type check and creates a standalone VSIX. CSS language-service dependencies are bundled into `dist/extension.cjs`; the packaged extension only needs the VS Code extension host's `vscode` API at runtime.
+`yarn test` covers template detection and source-to-virtual-CSS mapping. `yarn test:integration` starts an Extension Development Host and verifies actual TSX completion behavior. `yarn verify` runs both test layers, the type check, and creates a standalone VSIX. CSS language-service and TypeScript parser dependencies are bundled into `dist/extension.cjs`; the packaged extension only needs the VS Code extension host's `vscode` API at runtime.
 
 ## Current Scope
 
-Template detection is intentionally text-based in this version. Standard `styled`, `css`, `globalStyle`, and `keyframes` tag names are recognized, but the extension does not yet verify their import source or handle aliased and namespace imports. A future semantic implementation can use the TypeScript compiler API to resolve `next-yak` imports.
+Completion detects direct, aliased, and namespace imports from `next-yak` through the TypeScript AST, and ignores locally shadowed identifiers. Syntax highlighting remains TextMate-pattern based, so a visually highlighted template is not itself proof that its binding comes from `next-yak`.
 
 `publisher` is currently `local` for VSIX testing. Register a Marketplace publisher and update that field before publishing to the Visual Studio Marketplace.
