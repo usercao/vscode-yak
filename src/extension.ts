@@ -3,9 +3,16 @@ import {
   getDefaultCSSDataProvider,
   getCSSLanguageService,
   type CompletionItem as CssCompletionItem,
+  type Hover as CssHover,
+  type MarkedString,
+  type MarkupContent,
   type Range as CssRange,
 } from 'vscode-css-languageservice'
 import { TextDocument } from 'vscode-languageserver-textdocument'
+import {
+  getNextYakCssHover,
+  type VirtualCssDocument,
+} from './nextYakHover'
 import {
   createVirtualCssText,
   getSelectorCompletionContext,
@@ -27,33 +34,29 @@ const nextYakDocumentSelector: vscode.DocumentSelector = [
 ]
 const cssCompletionTriggerCharacters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ:-@'.split('')
 
-interface VirtualCssDocument {
-  document: TextDocument
-  prefixLength: number
-  sourceLength: number
-  sourceStart: number
-}
-
 export function activate(context: vscode.ExtensionContext) {
-  const completionProvider = new NextYakCssCompletionProvider()
+  const templateCache = new NextYakTemplateCache()
+  const completionProvider = new NextYakCssCompletionProvider(templateCache)
+  const hoverProvider = new NextYakCssHoverProvider(templateCache)
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument((event) => {
-      completionProvider.invalidateDocument(event.document.uri.toString())
+      templateCache.invalidateDocument(event.document.uri.toString())
     }),
     vscode.workspace.onDidCloseTextDocument((document) => {
-      completionProvider.invalidateDocument(document.uri.toString())
+      templateCache.invalidateDocument(document.uri.toString())
     }),
     vscode.languages.registerCompletionItemProvider(
       nextYakDocumentSelector,
       completionProvider,
       ...cssCompletionTriggerCharacters,
     ),
+    vscode.languages.registerHoverProvider(nextYakDocumentSelector, hoverProvider),
   )
 }
 
 export class NextYakCssCompletionProvider implements vscode.CompletionItemProvider {
-  private readonly templateCache = new NextYakTemplateCache()
+  constructor(private readonly templateCache = new NextYakTemplateCache()) {}
 
   invalidateDocument(uri: string): void {
     this.templateCache.invalidateDocument(uri)
@@ -113,6 +116,50 @@ export class NextYakCssCompletionProvider implements vscode.CompletionItemProvid
     )
 
     return new vscode.CompletionList([...items, ...selectorItems], true)
+  }
+}
+
+export class NextYakCssHoverProvider implements vscode.HoverProvider {
+  constructor(private readonly templateCache = new NextYakTemplateCache()) {}
+
+  provideHover(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+    token: vscode.CancellationToken,
+  ): vscode.Hover | undefined {
+    if (token.isCancellationRequested) {
+      return undefined
+    }
+
+    const source = document.getText()
+    const cursorOffset = document.offsetAt(position)
+    const template = this.templateCache.findTemplate({
+      fileName: document.fileName,
+      languageId: document.languageId,
+      source,
+      uri: document.uri.toString(),
+      version: document.version,
+    }, cursorOffset)
+
+    if (!template) {
+      return undefined
+    }
+
+    const hover = getNextYakCssHover(
+      cssLanguageService,
+      cursorOffset,
+      template,
+      createVirtualCssDocument(document, template),
+    )
+
+    if (!hover || token.isCancellationRequested) {
+      return undefined
+    }
+
+    return new vscode.Hover(
+      toHoverContents(hover.contents),
+      new vscode.Range(document.positionAt(hover.range.start), document.positionAt(hover.range.end)),
+    )
   }
 }
 
@@ -311,4 +358,26 @@ function toDocumentation(documentation: CssCompletionItem['documentation']) {
   }
 
   return new vscode.MarkdownString(documentation.value)
+}
+
+function toHoverContents(contents: CssHover['contents']): vscode.MarkdownString[] {
+  const entries = Array.isArray(contents) ? contents : [contents]
+
+  return entries.map((entry) => toHoverMarkdownString(entry))
+}
+
+function toHoverMarkdownString(content: MarkedString | MarkupContent): vscode.MarkdownString {
+  const markdown = new vscode.MarkdownString()
+
+  if (typeof content === 'string') {
+    return markdown.appendMarkdown(content)
+  }
+
+  if ('kind' in content) {
+    return content.kind === 'markdown'
+      ? markdown.appendMarkdown(content.value)
+      : markdown.appendText(content.value)
+  }
+
+  return markdown.appendCodeblock(content.value, content.language)
 }

@@ -61,19 +61,16 @@
 - [x] 已为同版本缓存复用、文档版本变更、文档关闭、语言模式切换和真实 Extension Host 文档编辑建立回归测试，避免使用过期 import binding。
 - [x] 已测量 TypeScript compiler API 内联后的 bundle 基线，并记录当前可接受预算、触发重新评估的阈值及 Oxc 解析器调研结论。
 
-### 尚未完成
-
-- [ ] 仅在满足 `docs/next-yak-vscode-parser-decision.md` 的语义、跨平台、体积和端到端性能准入条件后，再原型验证 Oxc 或其他替代解析器。
 
 ## P1：核心 CSS 语言体验
 
 ### Hover
 
-- [ ] 注册 `HoverProvider` 以在静态 next-yak CSS 区域显示 CSS 属性、值、函数、伪类和伪元素说明。
-- [ ] 将 CSS Language Service 的 hover range 从虚拟 CSS 文档准确映射回宿主文档。
-- [ ] 在 `${...}` 插值位置和虚拟包装范围内明确返回 no hover。
-- [ ] 将 CSS Language Service 的 Markdown hover 内容转换为 VS Code `MarkdownString` 并保留 MDN 链接。
-- [ ] 为属性、值、函数、伪类、伪元素、keyframes 和无效 CSS 位置添加 hover 单元与 Extension Host 测试。
+- [x] 已注册 `HoverProvider` 以在静态 next-yak CSS 区域显示 CSS 属性、文档化的值/函数、伪类和伪元素说明。
+- [x] 已将 CSS Language Service 的 hover range 从虚拟 CSS 文档准确映射回宿主文档。
+- [x] 已在 `${...}` 插值位置和虚拟包装范围内明确返回 no hover。
+- [x] 已将 CSS Language Service 的 Markdown hover 内容转换为 VS Code `MarkdownString` 并保留 MDN 链接。
+- [x] 已为属性、值、函数、伪类、伪元素、keyframes 和无效 CSS 位置添加 hover 单元与 Extension Host 测试。
 
 ### 诊断
 
@@ -201,6 +198,7 @@
 - [ ] 提供将可安全提取的 next-yak 静态样式迁移为原生 CSS 或 CSS Modules 的辅助操作。
 - [ ] 评估 CSS formatter 集成是否能在不破坏模板插值和 next-yak 编译约束的前提下格式化样式块。
 - [ ] 评估仅在 next-yak 上游明确支持并测试后提供可选 SCSS 或 Less 编辑模式的需求。
+- [ ] 仅在满足 `docs/next-yak-vscode-parser-decision.md` 的语义、跨平台、体积和端到端性能准入条件后，再原型验证 Oxc 或其他替代解析器。
 
 ## 已确认的边界
 

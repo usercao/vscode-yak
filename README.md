@@ -7,6 +7,7 @@ CSS syntax highlighting and IntelliSense for `next-yak` tagged templates in VS C
 - Highlights CSS inside `styled`, `css`, `globalStyle`, and `keyframes` templates.
 - Offers CSS property, value, function, at-rule, and custom property completion.
 - Offers pseudo-class and pseudo-element completion for selector prefixes such as `a:` and `a::`.
+- Shows CSS hover documentation for static properties, documented values/functions, pseudo-classes, and pseudo-elements, including MDN references when CSS data provides them.
 - Leaves `${...}` interpolations to the built-in JavaScript or TypeScript language service.
 - Resolves direct, aliased, and namespace `next-yak` imports before providing completion.
 - Supports TypeScript, TSX, JavaScript, and JSX files.
@@ -67,7 +68,7 @@ yarn build
 yarn verify
 ```
 
-`yarn test` runs ESM Vitest coverage for template detection, import semantics, interpolation masking, TextMate scopes, and source-to-virtual-CSS mapping. `yarn test:integration` starts an Extension Development Host and verifies completion in JavaScript, JSX, TypeScript, TSX, CSS props, supported next-yak template forms, pseudo selectors, virtual documents, cancellation, and a large-document baseline. All test source files use TypeScript; the CJS entry point required by the VS Code Extension Host is generated under `.vscode-test/compiled` immediately before integration tests run. `yarn verify` runs both test layers, the type check, and creates a standalone VSIX. CSS language-service and TypeScript parser dependencies are bundled into `dist/extension.cjs`; the packaged extension only needs the VS Code extension host's `vscode` API at runtime.
+`yarn test` runs ESM Vitest coverage for template detection, import semantics, interpolation masking, TextMate scopes, virtual-CSS mapping, and CSS hover behavior. `yarn test:integration` starts an Extension Development Host and verifies completion and hover in JavaScript, JSX, TypeScript, TSX, CSS props, supported next-yak template forms, pseudo selectors, virtual documents, cancellation, and a large-document baseline. All test source files use TypeScript; the CJS entry point required by the VS Code Extension Host is generated under `.vscode-test/compiled` immediately before integration tests run. `yarn verify` runs both test layers, the type check, and creates a standalone VSIX. CSS language-service and TypeScript parser dependencies are bundled into `dist/extension.cjs`; the packaged extension only needs the VS Code extension host's `vscode` API at runtime.
 
 ## TypeScript-First Development
 
@@ -84,5 +85,7 @@ The extension caches TypeScript template analysis by document URI and version, i
 ## Current Scope
 
 Completion detects direct, aliased, and namespace imports from `next-yak` through the TypeScript AST, ignores type-only imports and locally shadowed identifiers, and supports static string element access such as `styled['div']`. Dynamic tag expressions are intentionally ignored. Syntax highlighting remains TextMate-pattern based, so a visually highlighted template is not itself proof that its binding comes from `next-yak`.
+
+Hover uses the same static template recognition and virtual CSS mapping as completion. It intentionally returns no hover within `${...}` interpolation, synthetic virtual CSS wrappers, unsupported keyframe step selectors, or CSS positions for which the language service has no documentation.
 
 `publisher` is currently `local` for VSIX testing. Register a Marketplace publisher and update that field before publishing to the Visual Studio Marketplace.

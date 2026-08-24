@@ -33,10 +33,24 @@ interface DirectCompletionProviderConstructor {
   new (): DirectCompletionProvider
 }
 
+interface DirectHoverProvider {
+  provideHover(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+    token: vscode.CancellationToken,
+  ): vscode.Hover | undefined
+}
+
+interface DirectHoverProviderConstructor {
+  new (): DirectHoverProvider
+}
+
 interface ExtensionModule {
   NextYakCssCompletionProvider?: DirectCompletionProviderConstructor
+  NextYakCssHoverProvider?: DirectHoverProviderConstructor
   default?: {
     NextYakCssCompletionProvider?: DirectCompletionProviderConstructor
+    NextYakCssHoverProvider?: DirectHoverProviderConstructor
   }
 }
 
@@ -173,6 +187,14 @@ async function createDirectProvider(extensionPath: string): Promise<DirectComple
   return new Provider()
 }
 
+async function createDirectHoverProvider(extensionPath: string): Promise<DirectHoverProvider> {
+  const extensionModule = await import(pathToFileURL(join(extensionPath, 'dist', 'extension.cjs')).href) as ExtensionModule
+  const Provider = extensionModule.NextYakCssHoverProvider ?? extensionModule.default?.NextYakCssHoverProvider
+
+  assert.ok(Provider, 'Expected the extension bundle to export NextYakCssHoverProvider')
+  return new Provider()
+}
+
 function cancellationToken(cancelOnCheck: number): vscode.CancellationToken {
   let checks = 0
 
@@ -219,6 +241,30 @@ async function completionItemsAt(document: vscode.TextDocument, cursorOffset: nu
   )
 
   return completionList?.items ?? []
+}
+
+function hoverContentText(hover: vscode.Hover): string {
+  return hover.contents
+    .map((content) => typeof content === 'string' ? content : content.value)
+    .join('\n')
+}
+
+function hoverRange(hover: vscode.Hover): vscode.Range {
+  if (!hover.range) {
+    throw new Error('Expected hover to define a source replacement range')
+  }
+
+  return hover.range
+}
+
+async function registeredHoversAt(document: vscode.TextDocument, cursorOffset: number): Promise<readonly vscode.Hover[]> {
+  await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true })
+
+  return vscode.commands.executeCommand<vscode.Hover[]>(
+    'vscode.executeHoverProvider',
+    document.uri,
+    document.positionAt(cursorOffset),
+  )
 }
 
 export async function run(): Promise<void> {
@@ -395,6 +441,63 @@ export async function run(): Promise<void> {
       nextYakItems(updatedItems).length,
       0,
       `Expected no stale next-yak completions after removing the styled import; received ${nextYakItems(updatedItems).map(completionLabel).join(', ')}`,
+    )
+  })
+
+  await runCase('provides mapped CSS hover documentation and excludes unsupported positions', async () => {
+    const provider = await createDirectHoverProvider(extension.extensionPath)
+    const requestFor = async (css: string, tag = 'styled.div', importStatement = "import { styled } from 'next-yak'") => {
+      const request = await directProviderRequest(styledSource(css, tag, importStatement))
+
+      return {
+        ...request,
+        hover: provider.provideHover(request.document, request.position, neverCancelledToken),
+      }
+    }
+
+    const property = await requestFor('display/*cursor*/: grid;')
+    assert.ok(property.hover, 'Expected a property hover')
+    assert.ok(property.hover.contents[0] instanceof vscode.MarkdownString, 'Expected CSS Markdown to become a VS Code MarkdownString')
+    assert.match(hoverContentText(property.hover), /MDN Reference/)
+    assert.equal(property.document.getText(hoverRange(property.hover)), 'display: grid')
+
+    const value = await requestFor('display: gr/*cursor*/id;')
+    assert.ok(value.hover, 'Expected a value hover')
+    assert.match(hoverContentText(value.hover), /grid formatting context/)
+    assert.equal(value.document.getText(hoverRange(value.hover)), 'grid')
+
+    const functionHover = await requestFor('transform: rot/*cursor*/ate(45deg);')
+    assert.ok(functionHover.hover, 'Expected a function hover')
+    assert.match(hoverContentText(functionHover.hover), /2D rotation/)
+    assert.equal(functionHover.document.getText(hoverRange(functionHover.hover)), 'rotate')
+
+    const pseudoClass = await requestFor('a:ho/*cursor*/ver { color: red; }')
+    assert.ok(pseudoClass.hover, 'Expected a pseudo-class hover')
+    assert.match(hoverContentText(pseudoClass.hover), /pointing device/)
+    assert.equal(pseudoClass.document.getText(hoverRange(pseudoClass.hover)), ':hover')
+
+    const pseudoElement = await requestFor('a::bef/*cursor*/ore { color: red; }')
+    assert.ok(pseudoElement.hover, 'Expected a pseudo-element hover')
+    assert.match(hoverContentText(pseudoElement.hover), /styleable child pseudo-element/)
+    assert.equal(pseudoElement.document.getText(hoverRange(pseudoElement.hover)), '::before')
+
+    const keyframes = await requestFor('from { op/*cursor*/acity: 0; }', 'keyframes', "import { keyframes } from 'next-yak'")
+    assert.ok(keyframes.hover, 'Expected a keyframes property hover')
+    assert.match(hoverContentText(keyframes.hover), /MDN Reference/)
+
+    const interpolation = await requestFor('color: ${theme./*cursor*/accent};')
+    assert.equal(interpolation.hover, undefined)
+
+    const invalid = await requestFor('@unknown/*cursor*/ rule;')
+    assert.equal(invalid.hover, undefined)
+
+    const registeredSource = styledSource('display/*cursor*/: grid;')
+    const registeredRequest = await directProviderRequest(registeredSource)
+    const registeredHovers = await registeredHoversAt(registeredRequest.document, registeredSource.indexOf(cursorMarker))
+
+    assert.ok(
+      registeredHovers.some((hover) => hoverContentText(hover).includes('MDN Reference')),
+      'Expected the activated extension to register a CSS HoverProvider',
     )
   })
 
