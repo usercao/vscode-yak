@@ -209,6 +209,18 @@ async function directProviderRequest(source: string, language = 'typescriptreact
   }
 }
 
+async function completionItemsAt(document: vscode.TextDocument, cursorOffset: number): Promise<readonly vscode.CompletionItem[]> {
+  await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true })
+
+  const completionList = await vscode.commands.executeCommand<vscode.CompletionList | undefined>(
+    'vscode.executeCompletionItemProvider',
+    document.uri,
+    document.positionAt(cursorOffset),
+  )
+
+  return completionList?.items ?? []
+}
+
 export async function run(): Promise<void> {
   const extension = vscode.extensions.getExtension('local.next-yak-vscode')
 
@@ -360,6 +372,30 @@ export async function run(): Promise<void> {
         `Expected no next-yak completion for an unsupported tag binding; received ${nextYakItems(items).map(completionLabel).join(', ')}`,
       )
     }
+  })
+
+  await runCase('invalidates cached binding analysis after a document edit', async () => {
+    const source = styledSource()
+    const cursorOffset = source.indexOf(cursorMarker)
+    const document = await vscode.workspace.openTextDocument({
+      language: 'typescriptreact',
+      content: source.replace(cursorMarker, ''),
+    })
+
+    const initialItems = await completionItemsAt(document, cursorOffset)
+    assert.ok(findNextYakItem(initialItems, 'color'), 'Expected a next-yak completion before removing the import')
+
+    const editor = await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true })
+    const importRange = new vscode.Range(document.positionAt(0), document.positionAt(document.getText().indexOf('\n') + 1))
+
+    await editor.edit((edit) => edit.replace(importRange, "import { css } from 'next-yak'\n"))
+
+    const updatedItems = await completionItemsAt(document, cursorOffset)
+    assert.equal(
+      nextYakItems(updatedItems).length,
+      0,
+      `Expected no stale next-yak completions after removing the styled import; received ${nextYakItems(updatedItems).map(completionLabel).join(', ')}`,
+    )
   })
 
   await runCase('keeps completion ranges safe for incomplete templates and syntax errors', async () => {

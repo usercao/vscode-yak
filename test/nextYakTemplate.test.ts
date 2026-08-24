@@ -1,9 +1,26 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+const { createProgramSpy } = vi.hoisted(() => ({
+  createProgramSpy: vi.fn(),
+}))
+
+vi.mock('typescript', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('typescript')>()
+
+  createProgramSpy.mockImplementation(actual.createProgram)
+
+  return {
+    ...actual,
+    createProgram: createProgramSpy,
+  }
+})
+
 import {
   createVirtualCssText,
   findNextYakTemplate,
   getSelectorCompletionContext,
   mapVirtualRangeToSourceOffsets,
+  NextYakTemplateCache,
 } from '../src/nextYakTemplate'
 
 const cursorMarker = '/*cursor*/'
@@ -35,6 +52,25 @@ function styledSource(tagExpression: string, importStatement = "import { styled 
 
 function sourceWithCursor(lines: readonly string[]) {
   return findTemplateAtCursor(lines.join('\n'))
+}
+
+function templateCacheRequest(sourceWithCursor: string, version: number, uri = 'file:///fixture.tsx') {
+  const cursorOffset = sourceWithCursor.indexOf(cursorMarker)
+
+  if (cursorOffset === -1) {
+    throw new Error(`Missing ${cursorMarker} marker`)
+  }
+
+  return {
+    cursorOffset,
+    document: {
+      fileName: '/fixture.tsx',
+      languageId: 'typescriptreact',
+      source: sourceWithCursor.replace(cursorMarker, ''),
+      uri,
+      version,
+    },
+  }
 }
 
 function expectTemplateTag(source: string, expectedTag: 'styled' | 'css' | 'globalStyle' | 'keyframes', languageId = 'typescriptreact') {
@@ -370,6 +406,72 @@ describe('findNextYakTemplate', () => {
 
     expect(unfinishedInterpolation.template).toBeUndefined()
     expect(unfinishedTemplate.template?.tag).toBe('styled')
+  })
+})
+
+describe('NextYakTemplateCache', () => {
+  it('reuses the semantic analysis for repeated completion requests at the same URI and version', () => {
+    const cache = new NextYakTemplateCache()
+    const request = templateCacheRequest(styledSource('styled.div'), 1)
+
+    createProgramSpy.mockClear()
+    expect(cache.findTemplate(request.document, request.cursorOffset)?.tag).toBe('styled')
+    expect(cache.findTemplate(request.document, request.cursorOffset)?.tag).toBe('styled')
+    expect(createProgramSpy).toHaveBeenCalledTimes(1)
+    expect(cache.size).toBe(1)
+  })
+
+  it('rebuilds bindings when a document version changes so removed imports cannot remain active', () => {
+    const cache = new NextYakTemplateCache()
+    const initial = templateCacheRequest(styledSource('styled.div'), 1)
+    const modified = templateCacheRequest(
+      [
+        "import { css } from 'next-yak'",
+        'const Value = styled.div`',
+        `  col${cursorMarker}`,
+        '`',
+      ].join('\n'),
+      2,
+      initial.document.uri,
+    )
+
+    expect(cache.findTemplate(initial.document, initial.cursorOffset)?.tag).toBe('styled')
+    expect(cache.findTemplate(modified.document, modified.cursorOffset)).toBeUndefined()
+    expect(cache.size).toBe(1)
+  })
+
+  it('invalidates a closed document before its URI is reopened', () => {
+    const cache = new NextYakTemplateCache()
+    const initial = templateCacheRequest(styledSource('styled.div'), 1)
+    const reopened = templateCacheRequest(
+      [
+        "import { css } from 'next-yak'",
+        'const Value = styled.div`',
+        `  col${cursorMarker}`,
+        '`',
+      ].join('\n'),
+      1,
+      initial.document.uri,
+    )
+
+    expect(cache.findTemplate(initial.document, initial.cursorOffset)?.tag).toBe('styled')
+    cache.invalidateDocument(initial.document.uri)
+    expect(cache.size).toBe(0)
+    expect(cache.findTemplate(reopened.document, reopened.cursorOffset)).toBeUndefined()
+  })
+
+  it('rebuilds the parsed AST when a document language changes', () => {
+    const cache = new NextYakTemplateCache()
+    const tsx = templateCacheRequest(styledSource('styled.div'), 1)
+    const javascript = {
+      ...tsx.document,
+      languageId: 'javascript',
+    }
+
+    createProgramSpy.mockClear()
+    expect(cache.findTemplate(tsx.document, tsx.cursorOffset)?.tag).toBe('styled')
+    expect(cache.findTemplate(javascript, tsx.cursorOffset)?.tag).toBe('styled')
+    expect(createProgramSpy).toHaveBeenCalledTimes(2)
   })
 })
 

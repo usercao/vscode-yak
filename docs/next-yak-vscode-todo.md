@@ -57,13 +57,13 @@
 - [x] 已为未保存 `untitled:`、只读内容提供器和远程式 URI 运行补全定位回归测试。
 - [x] 已为已取消请求和 80 个 tagged template 上的连续补全请求建立 Extension Host 回归与 5 秒宽松延迟预算。
 - [x] 已为 TextMate grammar 的静态误命中建立已知限制测试，避免将高亮 scope 误当作 AST 语义判断。
+- [x] 已按文档 URI、版本、语言、文件名和完整文本缓存 SourceFile 及已解析的 next-yak tagged template binding，避免连续补全重复创建 TypeScript Program。
+- [x] 已为同版本缓存复用、文档版本变更、文档关闭、语言模式切换和真实 Extension Host 文档编辑建立回归测试，避免使用过期 import binding。
+- [x] 已测量 TypeScript compiler API 内联后的 bundle 基线，并记录当前可接受预算、触发重新评估的阈值及 Oxc 解析器调研结论。
 
 ### 尚未完成
 
-- [ ] 按文档 URI 与版本缓存 SourceFile、TypeChecker 或可复用绑定信息以避免每次补全都创建 TypeScript Program。
-- [ ] 为 AST 缓存失效、文档修改和文档关闭建立回归测试以避免使用过期 import binding。
-- [ ] 评估并记录 `typescript` compiler API 内联后约 8.9 MB bundle 的可接受预算与优化目标。
-- [ ] 在不降低绑定识别正确性的前提下评估延迟加载、精简 parser 或替代绑定解析方案以缩小激活成本。
+- [ ] 仅在满足 `docs/next-yak-vscode-parser-decision.md` 的语义、跨平台、体积和端到端性能准入条件后，再原型验证 Oxc 或其他替代解析器。
 
 ## P1：核心 CSS 语言体验
 

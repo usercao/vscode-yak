@@ -25,6 +25,14 @@ export interface SelectorCompletionContext {
   text: string
 }
 
+export interface NextYakTemplateDocument {
+  fileName: string
+  languageId: string
+  source: string
+  uri: string
+  version: number
+}
+
 interface NamedNextYakBinding {
   kind: 'named'
   tag: NextYakTag
@@ -38,6 +46,19 @@ interface TagPath {
   hasCall: boolean
   properties: string[]
   root: ts.Identifier
+}
+
+interface CachedNextYakTemplateAnalysis {
+  fileName: string
+  languageId: string
+  sourceFile: ts.SourceFile
+  taggedTemplates: readonly TaggedNextYakTemplate[]
+  version: number
+}
+
+interface TaggedNextYakTemplate {
+  node: ts.TaggedTemplateExpression
+  tag: NextYakTag
 }
 
 type NextYakBinding = NamedNextYakBinding | NamespaceNextYakBinding
@@ -59,6 +80,37 @@ const regularExpressionPrefixKeywords = new Set([
   'yield',
 ])
 
+export class NextYakTemplateCache {
+  private readonly analyses = new Map<string, CachedNextYakTemplateAnalysis>()
+
+  get size(): number {
+    return this.analyses.size
+  }
+
+  clear(): void {
+    this.analyses.clear()
+  }
+
+  findTemplate(document: NextYakTemplateDocument, cursorOffset: number): NextYakTemplate | undefined {
+    if (cursorOffset < 0 || cursorOffset > document.source.length) {
+      return undefined
+    }
+
+    let analysis = this.analyses.get(document.uri)
+
+    if (!analysis || !matchesDocument(analysis, document)) {
+      analysis = createNextYakTemplateAnalysis(document.source, document.languageId, document.fileName, document.version)
+      this.analyses.set(document.uri, analysis)
+    }
+
+    return findNextYakTemplateInAnalysis(document.source, cursorOffset, analysis)
+  }
+
+  invalidateDocument(uri: string): void {
+    this.analyses.delete(uri)
+  }
+}
+
 export function findNextYakTemplate(
   source: string,
   cursorOffset: number,
@@ -69,34 +121,72 @@ export function findNextYakTemplate(
     return undefined
   }
 
-  const scriptKind = toScriptKind(languageId)
-  const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, scriptKind)
+  const analysis = createNextYakTemplateAnalysis(source, languageId, fileName, 0)
+
+  return findNextYakTemplateInAnalysis(source, cursorOffset, analysis)
+}
+
+function matchesDocument(
+  analysis: CachedNextYakTemplateAnalysis,
+  document: NextYakTemplateDocument,
+) {
+  return analysis.version === document.version
+    && analysis.languageId === document.languageId
+    && analysis.fileName === document.fileName
+    && analysis.sourceFile.text === document.source
+}
+
+function createNextYakTemplateAnalysis(
+  source: string,
+  languageId: string,
+  fileName: string,
+  version: number,
+): CachedNextYakTemplateAnalysis {
+  const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, toScriptKind(languageId))
   const checker = createTypeChecker(sourceFile, fileName)
   const bindings = collectNextYakBindings(sourceFile, checker)
+  const taggedTemplates: TaggedNextYakTemplate[] = []
 
-  if (bindings.size === 0) {
-    return undefined
-  }
+  if (bindings.size > 0) {
+    const visit = (node: ts.Node) => {
+      if (ts.isTaggedTemplateExpression(node)) {
+        const tag = getNextYakTag(node.tag, checker, bindings)
 
-  let closestTemplate: NextYakTemplate | undefined
-
-  const visit = (node: ts.Node) => {
-    if (ts.isTaggedTemplateExpression(node)) {
-      const tag = getNextYakTag(node.tag, checker, bindings)
-
-      if (tag) {
-        const template = createTemplate(source, sourceFile, node, tag, cursorOffset)
-
-        if (template && (!closestTemplate || template.bodyEnd - template.bodyStart < closestTemplate.bodyEnd - closestTemplate.bodyStart)) {
-          closestTemplate = template
+        if (tag) {
+          taggedTemplates.push({ node, tag })
         }
       }
+
+      ts.forEachChild(node, visit)
     }
 
-    ts.forEachChild(node, visit)
+    visit(sourceFile)
   }
 
-  visit(sourceFile)
+  return {
+    fileName,
+    languageId,
+    sourceFile,
+    taggedTemplates,
+    version,
+  }
+}
+
+function findNextYakTemplateInAnalysis(
+  source: string,
+  cursorOffset: number,
+  analysis: CachedNextYakTemplateAnalysis,
+): NextYakTemplate | undefined {
+  let closestTemplate: NextYakTemplate | undefined
+
+  for (const taggedTemplate of analysis.taggedTemplates) {
+    const template = createTemplate(source, analysis.sourceFile, taggedTemplate.node, taggedTemplate.tag, cursorOffset)
+
+    if (template && (!closestTemplate || template.bodyEnd - template.bodyStart < closestTemplate.bodyEnd - closestTemplate.bodyStart)) {
+      closestTemplate = template
+    }
+  }
+
   return closestTemplate
 }
 

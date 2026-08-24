@@ -8,9 +8,9 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument'
 import {
   createVirtualCssText,
-  findNextYakTemplate,
   getSelectorCompletionContext,
   mapVirtualRangeToSourceOffsets,
+  NextYakTemplateCache,
   type NextYakTemplate,
   type SelectorCompletionContext,
 } from './nextYakTemplate'
@@ -35,16 +35,30 @@ interface VirtualCssDocument {
 }
 
 export function activate(context: vscode.ExtensionContext) {
+  const completionProvider = new NextYakCssCompletionProvider()
+
   context.subscriptions.push(
+    vscode.workspace.onDidChangeTextDocument((event) => {
+      completionProvider.invalidateDocument(event.document.uri.toString())
+    }),
+    vscode.workspace.onDidCloseTextDocument((document) => {
+      completionProvider.invalidateDocument(document.uri.toString())
+    }),
     vscode.languages.registerCompletionItemProvider(
       nextYakDocumentSelector,
-      new NextYakCssCompletionProvider(),
+      completionProvider,
       ...cssCompletionTriggerCharacters,
     ),
   )
 }
 
 export class NextYakCssCompletionProvider implements vscode.CompletionItemProvider {
+  private readonly templateCache = new NextYakTemplateCache()
+
+  invalidateDocument(uri: string): void {
+    this.templateCache.invalidateDocument(uri)
+  }
+
   provideCompletionItems(
     document: vscode.TextDocument,
     position: vscode.Position,
@@ -56,7 +70,13 @@ export class NextYakCssCompletionProvider implements vscode.CompletionItemProvid
 
     const source = document.getText()
     const cursorOffset = document.offsetAt(position)
-    const template = findNextYakTemplate(source, cursorOffset, document.languageId, document.fileName)
+    const template = this.templateCache.findTemplate({
+      fileName: document.fileName,
+      languageId: document.languageId,
+      source,
+      uri: document.uri.toString(),
+      version: document.version,
+    }, cursorOffset)
 
     if (!template) {
       return undefined

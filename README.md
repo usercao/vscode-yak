@@ -77,6 +77,10 @@ Generated artifacts may use CJS or ESM when a consumer requires those formats, b
 
 The sole authored JavaScript-family fixture is [test-workspace/next-yak-example.jsx](test-workspace/next-yak-example.jsx). It deliberately remains JSX so the Extension Development Host can exercise the JavaScript/JSX language surface supported by this extension; it is test data rather than extension or test-runner implementation.
 
+## Parser Performance
+
+The extension caches TypeScript template analysis by document URI and version, invalidating it when VS Code reports a document change or close. This avoids rebuilding a TypeScript `Program` during consecutive completion requests while retaining semantic import and local-shadowing checks. [Parser and bundle decision](docs/next-yak-vscode-parser-decision.md) records the measured bundle budget and the Oxc evaluation: Oxc is not currently a drop-in replacement because its public Node parser API does not expose the lexical symbol bindings needed to preserve those checks.
+
 ## Current Scope
 
 Completion detects direct, aliased, and namespace imports from `next-yak` through the TypeScript AST, ignores type-only imports and locally shadowed identifiers, and supports static string element access such as `styled['div']`. Dynamic tag expressions are intentionally ignored. Syntax highlighting remains TextMate-pattern based, so a visually highlighted template is not itself proof that its binding comes from `next-yak`.
