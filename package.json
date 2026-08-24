@@ -1,7 +1,7 @@
 {
   "name": "next-yak-vscode",
   "displayName": "next-yak",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "CSS syntax highlighting and completion for next-yak tagged templates.",
   "categories": [
     "Programming Languages"
@@ -13,11 +13,22 @@
   ],
   "license": "MIT",
   "publisher": "local",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/usercao/next-yak-vscode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/usercao/next-yak-vscode/issues"
+  },
+  "homepage": "https://github.com/usercao/next-yak-vscode#readme",
+  "type": "module",
   "main": "./dist/extension.cjs",
   "scripts": {
     "build": "tsdown",
     "check": "tsc --noEmit",
-    "package": "yarn build && yarn dlx @vscode/vsce@3.9.2 package --allow-missing-repository --no-yarn --out ./next-yak-vscode-0.0.2.vsix"
+    "verify": "yarn check && yarn package",
+    "vscode:prepublish": "yarn build",
+    "package": "yarn vsce package --no-yarn --no-dependencies --out ./next-yak-vscode-${npm_package_version}.vsix"
   },
   "dependencies": {
     "vscode-css-languageservice": "^6.3.10",
@@ -25,6 +36,7 @@
   },
   "devDependencies": {
     "@types/vscode": "^1.134.0",
+    "@vscode/vsce": "3.9.2",
     "tsdown": "^0.22.14",
     "typescript": "~6.0.2"
   },
@@ -42,14 +54,30 @@
           "meta.embedded.line.tsx": "typescriptreact",
           "source.css": "css"
         }
+      },
+      {
+        "scopeName": "next-yak-js.injection",
+        "path": "./syntaxes/next-yak-js.injection.json",
+        "injectTo": [
+          "source.js",
+          "source.js.jsx"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.line.js": "javascript",
+          "source.css": "css"
+        }
       }
     ]
   },
   "activationEvents": [
     "onLanguage:typescript",
-    "onLanguage:typescriptreact"
+    "onLanguage:typescriptreact",
+    "onLanguage:javascript",
+    "onLanguage:javascriptreact"
   ],
   "engines": {
-    "vscode": "^1.134.0"
-  }
+    "vscode": "^1.134.0",
+    "node": ">=24.19.0"
+  },
+  "packageManager": "yarn@4.18.0"
 }

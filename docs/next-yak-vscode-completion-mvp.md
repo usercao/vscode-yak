@@ -2,11 +2,11 @@
 
 ## 目标
 
-为 TypeScript 和 TSX 中的标准 next-yak tagged template 提供 CSS 属性和值补全。第一版只解决当前编辑器中的单文件、静态 CSS 区域；不实现 AST 导入解析、hover、诊断、工作区索引或自动化测试。
+为 TypeScript、TSX、JavaScript 和 JSX 中的标准 next-yak tagged template 提供 CSS 属性和值补全。第一版只解决当前编辑器中的单文件、静态 CSS 区域；不实现 AST 导入解析、hover、诊断、工作区索引或自动化测试。
 
 ## 实现
 
-运行时入口位于 `packages/next-yak-vscode/src/extension.ts`。扩展在 TypeScript 与 TSX 文档激活后注册一个 `CompletionItemProvider`，支持下列静态标签形式：
+运行时入口位于 `src/extension.ts`。扩展在 TypeScript、TSX、JavaScript 与 JSX 文档激活后注册一个 `CompletionItemProvider`，支持下列静态标签形式：
 
 ```tsx
 styled.div`...`
@@ -58,17 +58,16 @@ flowchart TD
 
 ## 构建与验证
 
-扩展使用 `tsdown` 将 `src/extension.ts` 打为 CommonJS `dist/extension.cjs`；`vscode` 保持 external，由 VS Code 扩展宿主提供。这个选择遵循 VS Code 官方 Node 扩展 bundling 示例。当前 VS Code 也支持 ESM：当 manifest 声明 `"type": "module"` 且入口不是 `.cjs` 时，扩展宿主会使用动态 `import()`；否则会使用 CommonJS `require()`。本 MVP 选择 CJS，以符合官方示例和更广泛的既有扩展兼容路径。
+扩展使用 `tsdown` 将 `src/extension.ts` 打为 CommonJS `dist/extension.cjs`；仅 `vscode` 保持 external，由 VS Code 扩展宿主提供。CSS language service 与文本模型会内联到 bundle，使 VSIX 不依赖网站项目或安装机上的 `node_modules`。当前 VS Code 也支持 ESM：当 manifest 声明 `"type": "module"` 且入口不是 `.cjs` 时，扩展宿主会使用动态 `import()`；否则会使用 CommonJS `require()`。本 MVP 选择 CJS，以符合官方示例和更广泛的既有扩展兼容路径。
 
-`vscode-css-languageservice` 与 `vscode-languageserver-textdocument` 保持为 production dependency，由 `@vscode/vsce` 连同其依赖树写入 VSIX；因此安装后的扩展不依赖网站项目的 `node_modules`。
+`vscode-css-languageservice` 与 `vscode-languageserver-textdocument` 在构建时打入运行入口。`@vscode/vsce` 使用 `--no-dependencies` 打包，避免 Yarn 4 的开发依赖树进入 VSIX。
 
 扩展自身使用 Yarn 4，但 VSCE 的 Yarn dependency 检测仍调用 Yarn Classic 的 `yarn list --prod --json`，会失败。因此 `package` 脚本传入 `--no-yarn`，让 VSCE 用 `npm list --omit=dev` 计算要写入 VSIX 的运行时依赖。
 
 ```bash
-cd packages/next-yak-vscode
 yarn check
 yarn build
 yarn package
 ```
 
-最小手动验证：在 `styled.header` 模板内输入 `wid` 并调用补全，应出现 `width`；在 `color: ` 后调用补全，应出现颜色和 CSS 值；在 `${props => props.}` 内调用补全时，应只看到 TypeScript 的补全结果。
+最小手动验证：在 `styled.header` 模板内输入 `wid` 并调用补全，应出现 `width`；在 `color: ` 后调用补全，应出现颜色和 CSS 值；在 `${props => props.}` 内调用补全时，应只看到 TypeScript 的补全结果。可按 `F5` 启动 Extension Development Host 并打开 `test-workspace/`，或安装生成的 VSIX 后在任意其他项目中验证。

@@ -46,9 +46,6 @@
     "*": false
   },
 
-  // 禁止 Copilot 自动触发补全
-  "github.copilot.editor.enableAutoCompletions": false,
-
   // 关闭 Copilot 的“下一处编辑建议”
   "github.copilot.nextEditSuggestions.enabled": false
 }

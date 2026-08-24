@@ -7,6 +7,12 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument'
 
 const cssLanguageService = getCSSLanguageService()
+const nextYakDocumentSelector: vscode.DocumentSelector = [
+  { language: 'javascript' },
+  { language: 'javascriptreact' },
+  { language: 'typescript' },
+  { language: 'typescriptreact' },
+]
 const taggedTemplatePattern =
   /\b(styled(?:\s*\.\s*[$A-Z_a-z][$\w]*|\s*\([^`()]*\))|css|globalStyle|keyframes)\s*`/g
 
@@ -31,7 +37,7 @@ interface VirtualCssDocument {
 export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.languages.registerCompletionItemProvider(
-      [{ language: 'typescript' }, { language: 'typescriptreact' }],
+      nextYakDocumentSelector,
       new NextYakCssCompletionProvider(),
       ':',
       '-',
