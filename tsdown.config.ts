@@ -1,6 +1,18 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'tsdown'
 
+const cssLanguageServiceEsmEntry = fileURLToPath(
+  new URL('./node_modules/vscode-css-languageservice/lib/esm/cssLanguageService.js', import.meta.url),
+)
+const textDocumentEsmEntry = fileURLToPath(
+  new URL('./node_modules/vscode-languageserver-textdocument/lib/esm/main.js', import.meta.url),
+)
+
 export default defineConfig({
+  alias: {
+    'vscode-css-languageservice': cssLanguageServiceEsmEntry,
+    'vscode-languageserver-textdocument': textDocumentEsmEntry,
+  },
   deps: {
     alwaysBundle: ['vscode-css-languageservice', 'vscode-languageserver-textdocument'],
     neverBundle: ['vscode'],

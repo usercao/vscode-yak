@@ -10,5 +10,5 @@ const accent = 'rebeccapurple'
 export const Header = styled.header`
   display: grid;
   color: ${accent};
-  wid
+  column-fill: bal
 `

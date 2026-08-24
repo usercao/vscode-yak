@@ -13,6 +13,7 @@ const nextYakDocumentSelector: vscode.DocumentSelector = [
   { language: 'typescript' },
   { language: 'typescriptreact' },
 ]
+const cssCompletionTriggerCharacters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ:-@'.split('')
 const taggedTemplatePattern =
   /\b(styled(?:\s*\.\s*[$A-Z_a-z][$\w]*|\s*\([^`()]*\))|css|globalStyle|keyframes)\s*`/g
 
@@ -39,8 +40,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.languages.registerCompletionItemProvider(
       nextYakDocumentSelector,
       new NextYakCssCompletionProvider(),
-      ':',
-      '-',
+      ...cssCompletionTriggerCharacters,
     ),
   )
 }

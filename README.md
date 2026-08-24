@@ -51,7 +51,7 @@ On macOS, when `code` is not on `PATH`, use the application-bundled CLI:
   --install-extension ./next-yak-vscode-0.1.0.vsix --force
 ```
 
-Reload VS Code, open any other project containing `.ts`, `.tsx`, `.js`, or `.jsx` files, and request completion inside a supported template. For example, type `wid` in a `styled.div` template and invoke completion to see `width`.
+Reload VS Code, open any other project containing `.ts`, `.tsx`, `.js`, or `.jsx` files, and request completion inside a supported template. For example, type `bal` after `column-fill: ` in a `styled.div` template and invoke completion to see `balance`.
 
 The repository also contains `test-workspace/`, an isolated fixture that can be opened as a normal workspace. Press `F5` from the extension repository to launch an Extension Development Host with that fixture already open; this route tests source changes without reinstalling a VSIX.
 

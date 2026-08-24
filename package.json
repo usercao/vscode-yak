@@ -35,6 +35,7 @@
     "vscode-languageserver-textdocument": "^1.0.12"
   },
   "devDependencies": {
+    "@types/node": "^24",
     "@types/vscode": "^1.134.0",
     "@vscode/vsce": "3.9.2",
     "tsdown": "^0.22.14",

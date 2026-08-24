@@ -11,7 +11,7 @@ export const Header = styled.header`
   display: grid;
   grid-template-columns: 1fr auto;
   color: ${accent};
-  wid
+  col
 `
 
 export const responsiveRules = css`

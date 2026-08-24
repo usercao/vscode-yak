@@ -34,11 +34,11 @@ flowchart TD
 
 ```css
 :root {
-  wid
+  column-fill: bal
 }
 ```
 
-包装层使 CSS Language Service 能将 `wid` 识别为声明位置，从而返回 `width`、`will-change` 等 CSS 属性。`keyframes` 模板改为包装在一个临时 `@keyframes` 规则中。
+包装层使 CSS Language Service 能识别静态 CSS 值位置，从而在 `column-fill: bal` 处返回 `balance`。`keyframes` 模板改为包装在一个临时 `@keyframes` 规则中。
 
 ## 插值处理
 
@@ -70,4 +70,4 @@ yarn build
 yarn package
 ```
 
-最小手动验证：在 `styled.header` 模板内输入 `wid` 并调用补全，应出现 `width`；在 `color: ` 后调用补全，应出现颜色和 CSS 值；在 `${props => props.}` 内调用补全时，应只看到 TypeScript 的补全结果。可按 `F5` 启动 Extension Development Host 并打开 `test-workspace/`，或安装生成的 VSIX 后在任意其他项目中验证。
+最小手动验证：在 `styled.header` 模板内的 `column-fill: ` 后输入 `bal` 并调用补全，应出现 `balance`；在 `color: ` 后调用补全，应出现颜色和 CSS 值；在 `${props => props.}` 内调用补全时，应只看到 TypeScript 的补全结果。可按 `F5` 启动 Extension Development Host 并打开 `test-workspace/`，或安装生成的 VSIX 后在任意其他项目中验证。
