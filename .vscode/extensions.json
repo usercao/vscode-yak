@@ -1,0 +1,7 @@
+{
+  "recommendations": [
+    "oxc.oxc-vscode",
+    "christian-kohler.path-intellisense",
+    "styled-components.vscode-styled-components"
+  ]
+}

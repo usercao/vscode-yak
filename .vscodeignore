@@ -1,0 +1,11 @@
+.git/**
+.gitignore
+.vscode/**
+.yarnrc.yml
+docs/**
+src/**
+tsconfig.json
+tsdown.config.ts
+*.vsix
+.yarn/*
+yarn.lock

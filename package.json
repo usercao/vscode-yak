@@ -1,0 +1,55 @@
+{
+  "name": "next-yak-vscode",
+  "displayName": "next-yak",
+  "version": "0.0.2",
+  "description": "CSS syntax highlighting and completion for next-yak tagged templates.",
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "css-in-js",
+    "next-yak",
+    "syntax-highlighting"
+  ],
+  "license": "MIT",
+  "publisher": "local",
+  "main": "./dist/extension.cjs",
+  "scripts": {
+    "build": "tsdown",
+    "check": "tsc --noEmit",
+    "package": "yarn build && yarn dlx @vscode/vsce@3.9.2 package --allow-missing-repository --no-yarn --out ./next-yak-vscode-0.0.2.vsix"
+  },
+  "dependencies": {
+    "vscode-css-languageservice": "^6.3.10",
+    "vscode-languageserver-textdocument": "^1.0.12"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.134.0",
+    "tsdown": "^0.22.14",
+    "typescript": "~6.0.2"
+  },
+  "contributes": {
+    "grammars": [
+      {
+        "scopeName": "next-yak.injection",
+        "path": "./syntaxes/next-yak.injection.json",
+        "injectTo": [
+          "source.ts",
+          "source.tsx"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.line.ts": "typescript",
+          "meta.embedded.line.tsx": "typescriptreact",
+          "source.css": "css"
+        }
+      }
+    ]
+  },
+  "activationEvents": [
+    "onLanguage:typescript",
+    "onLanguage:typescriptreact"
+  ],
+  "engines": {
+    "vscode": "^1.134.0"
+  }
+}
