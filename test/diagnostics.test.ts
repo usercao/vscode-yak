@@ -35,7 +35,9 @@ function getTemplate(source: string, needle: string): Template {
 }
 
 function styledSource(css: string): string {
-  return ["import { styled } from 'yak'", 'const Panel = styled.div`', `  ${css}`, '`'].join('\n')
+  return ["import { styled } from 'next-yak'", 'const Panel = styled.div`', `  ${css}`, '`'].join(
+    '\n',
+  )
 }
 
 function cssDiagnostic(
@@ -139,7 +141,7 @@ describe('yak CSS diagnostics', () => {
     const nestedSource = styledSource('&:hover {\n    colro: red;\n  }')
     const nestedTemplate = getTemplate(nestedSource, 'colro')
     const keyframesSource = [
-      "import { keyframes } from 'yak'",
+      "import { keyframes } from 'next-yak'",
       'const fade = keyframes`',
       '  from { opacity: rgb(1, 2, 3; }',
       '`',

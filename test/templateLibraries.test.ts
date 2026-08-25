@@ -7,12 +7,14 @@ import {
 } from '../src/templateLibraries'
 
 describe('template library profiles', () => {
-  it('treats next-yak as the primary yak module while preserving migration aliases', () => {
+  it('treats next-yak as the current yak module while supporting framework packages', () => {
     const profiles = getTemplateLibraryProfiles(['yak'])
 
-    for (const moduleSpecifier of ['next-yak', '@yak/react', 'yak']) {
+    for (const moduleSpecifier of ['next-yak', '@yak/react', '@yak/solid']) {
       expect(getTemplateLibraryProfile(moduleSpecifier, profiles)?.id).toBe('yak')
     }
+
+    expect(getTemplateLibraryProfile('yak', profiles)).toBeUndefined()
   })
 
   it('maps styled-components imports to shared template tags', () => {

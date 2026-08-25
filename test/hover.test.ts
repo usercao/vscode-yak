@@ -46,7 +46,9 @@ function createVirtualDocument(source: string, template: Template): VirtualCssDo
 }
 
 function styledSource(css: string): string {
-  return ["import { styled } from 'yak'", 'const Panel = styled.div`', `  ${css}`, '`'].join('\n')
+  return ["import { styled } from 'next-yak'", 'const Panel = styled.div`', `  ${css}`, '`'].join(
+    '\n',
+  )
 }
 
 function hoverMarkdownValue(hover: ReturnType<typeof hoverAtCursor>['hover']): string | undefined {
@@ -92,7 +94,7 @@ describe('yak CSS hover', () => {
   it('returns property hover inside keyframes but not for keyframe selectors', () => {
     const property = hoverAtCursor(
       [
-        "import { keyframes } from 'yak'",
+        "import { keyframes } from 'next-yak'",
         'const fade = keyframes`',
         '  from {',
         '    op/*cursor*/acity: 0;',
@@ -102,7 +104,7 @@ describe('yak CSS hover', () => {
     ).hover
     const keyframeSelector = hoverAtCursor(
       [
-        "import { keyframes } from 'yak'",
+        "import { keyframes } from 'next-yak'",
         'const fade = keyframes`',
         '  fr/*cursor*/om {',
         '    opacity: 0;',

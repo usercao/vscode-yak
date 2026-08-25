@@ -46,7 +46,10 @@ function findTemplateAtCursor(source: string, languageId = 'typescriptreact') {
   }
 }
 
-function styledSource(tagExpression: string, importStatement = "import { styled } from 'yak'") {
+function styledSource(
+  tagExpression: string,
+  importStatement = "import { styled } from 'next-yak'",
+) {
   return [
     importStatement,
     `const Value = ${tagExpression}\``,
@@ -91,8 +94,8 @@ function expectTemplateTag(
 }
 
 describe('findTemplate', () => {
-  it.each(['next-yak', '@yak/react', 'yak'])(
-    'recognizes %s as a yak migration module',
+  it.each(['next-yak', '@yak/react', '@yak/solid'])(
+    'recognizes %s as a supported yak package',
     (moduleSpecifier) => {
       const { template } = findTemplateAtCursor(
         styledSource('styled.div', `import { styled } from '${moduleSpecifier}'`),
@@ -102,7 +105,7 @@ describe('findTemplate', () => {
     },
   )
 
-  it.each(['next-yak', '@yak/react', 'yak'])(
+  it.each(['next-yak', '@yak/react', '@yak/solid'])(
     'recognizes aliases and namespace imports from %s',
     (moduleSpecifier) => {
       expect(
@@ -123,29 +126,30 @@ describe('findTemplate', () => {
     ['css', 'css'],
     ['globalStyle', 'globalStyle'],
     ['keyframes', 'keyframes'],
-  ])('recognizes direct yak %s imports', (expectedTag, tagExpression) => {
+  ])('recognizes direct next-yak %s imports', (expectedTag, tagExpression) => {
     const { template } = findTemplateAtCursor(
-      styledSource(tagExpression, "import { css, globalStyle, keyframes, styled } from 'yak'"),
+      styledSource(tagExpression, "import { css, globalStyle, keyframes, styled } from 'next-yak'"),
     )
 
     expect(template?.tag).toBe(expectedTag)
   })
 
-  it('recognizes aliases and namespace imports', () => {
+  it('recognizes next-yak aliases and namespace imports', () => {
     expect(
-      findTemplateAtCursor(styledSource('s.div', "import { styled as s } from 'yak'")).template
+      findTemplateAtCursor(styledSource('s.div', "import { styled as s } from 'next-yak'")).template
         ?.tag,
     ).toBe('styled')
     expect(
-      findTemplateAtCursor(styledSource('rules', "import { css as rules } from 'yak'")).template
-        ?.tag,
+      findTemplateAtCursor(styledSource('rules', "import { css as rules } from 'next-yak'"))
+        .template?.tag,
     ).toBe('css')
     expect(
-      findTemplateAtCursor(styledSource('yak.styled.a', "import * as yak from 'yak'")).template
-        ?.tag,
+      findTemplateAtCursor(styledSource('library.styled.a', "import * as library from 'next-yak'"))
+        .template?.tag,
     ).toBe('styled')
     expect(
-      findTemplateAtCursor(styledSource('yak.css', "import * as yak from 'yak'")).template?.tag,
+      findTemplateAtCursor(styledSource('library.css', "import * as library from 'next-yak'"))
+        .template?.tag,
     ).toBe('css')
   })
 
@@ -185,6 +189,12 @@ describe('findTemplate', () => {
         '/fixture.tsx',
         getTemplateLibraryProfiles(['yak']),
       ),
+    ).toBeUndefined()
+  })
+
+  it('does not recognize the removed yak package name', () => {
+    expect(
+      findTemplateAtCursor(styledSource('styled.div', "import { styled } from 'yak'")).template,
     ).toBeUndefined()
   })
 
@@ -233,7 +243,7 @@ describe('findTemplate', () => {
 
   it('recognizes css prop templates and selects the innermost matching template', () => {
     const source = [
-      "import { css, styled } from 'yak'",
+      "import { css, styled } from 'next-yak'",
       'const Outer = styled.div`',
       '  color: red;',
       '  ${({ active }) => active && css`',
@@ -252,7 +262,7 @@ describe('findTemplate', () => {
 
     expectTemplateTag(
       [
-        "import { css } from 'yak'",
+        "import { css } from 'next-yak'",
         'const view = <section css={css`',
         `  display: grid;${cursorMarker}`,
         '`} />',
@@ -263,7 +273,7 @@ describe('findTemplate', () => {
 
   it('locates the correct template among adjacent and separate templates', () => {
     const source = [
-      "import { css, styled } from 'yak'",
+      "import { css, styled } from 'next-yak'",
       'const First = styled.div`color: red;`',
       'const Second = styled.span`',
       `  background: blue;${cursorMarker}`,
@@ -280,7 +290,10 @@ describe('findTemplate', () => {
 
   it('supports static string element access and rejects dynamic tag paths', () => {
     expectTemplateTag(styledSource("styled['div']"), 'styled')
-    expectTemplateTag(styledSource("yak.styled['section']", "import * as yak from 'yak'"), 'styled')
+    expectTemplateTag(
+      styledSource("yak.styled['section']", "import * as yak from 'next-yak'"),
+      'styled',
+    )
 
     for (const tagExpression of [
       'styled[tagName]',
@@ -295,15 +308,15 @@ describe('findTemplate', () => {
 
   it('defines import type, duplicate, conflict, and invalid import behavior', () => {
     expect(
-      findTemplateAtCursor(styledSource('styled.div', "import type { styled } from 'yak'"))
+      findTemplateAtCursor(styledSource('styled.div', "import type { styled } from 'next-yak'"))
         .template,
     ).toBeUndefined()
     expect(
-      findTemplateAtCursor(styledSource('styled.div', "import { type styled } from 'yak'"))
+      findTemplateAtCursor(styledSource('styled.div', "import { type styled } from 'next-yak'"))
         .template,
     ).toBeUndefined()
     expect(
-      findTemplateAtCursor(styledSource('yak.styled.div', "import type * as yak from 'yak'"))
+      findTemplateAtCursor(styledSource('yak.styled.div', "import type * as yak from 'next-yak'"))
         .template,
     ).toBeUndefined()
 
@@ -311,7 +324,9 @@ describe('findTemplate', () => {
       findTemplateAtCursor(
         styledSource(
           'styled.div',
-          ["import type { styled } from 'yak'", "import { styled } from 'yak'"].join('\n'),
+          ["import type { styled } from 'next-yak'", "import { styled } from 'next-yak'"].join(
+            '\n',
+          ),
         ),
       ).template,
     ).toBeUndefined()
@@ -320,8 +335,8 @@ describe('findTemplate', () => {
       styledSource(
         's.div',
         [
-          "import type { styled as StyledType } from 'yak'",
-          "import { styled as s } from 'yak'",
+          "import type { styled as StyledType } from 'next-yak'",
+          "import { styled as s } from 'next-yak'",
         ].join('\n'),
       ),
       'styled',
@@ -330,13 +345,14 @@ describe('findTemplate', () => {
     expectTemplateTag(
       styledSource(
         's.div',
-        ["import { styled } from 'yak'", "import { styled as s } from 'yak'"].join('\n'),
+        ["import { styled } from 'next-yak'", "import { styled as s } from 'next-yak'"].join('\n'),
       ),
       'styled',
     )
 
     expect(
-      findTemplateAtCursor(styledSource('styled.div', "import { styled as } from 'yak'")).template,
+      findTemplateAtCursor(styledSource('styled.div', "import { styled as } from 'next-yak'"))
+        .template,
     ).toBeUndefined()
   })
 
@@ -347,7 +363,7 @@ describe('findTemplate', () => {
     ).toBeUndefined()
 
     const source = [
-      "import { styled } from 'yak'",
+      "import { styled } from 'next-yak'",
       'function render(styled: { div: unknown }) {',
       '  return styled.div`',
       `    color: red;${cursorMarker}`,
@@ -360,7 +376,7 @@ describe('findTemplate', () => {
 
   it('skips interpolations while preserving the static CSS mapping', () => {
     const source = [
-      "import { styled } from 'yak'",
+      "import { styled } from 'next-yak'",
       'const accent = "rebeccapurple"',
       'const Panel = styled.div`',
       '  color: ${accent};',
@@ -383,7 +399,7 @@ describe('findTemplate', () => {
 
   it('preserves multiline nested interpolations while locating later static CSS', () => {
     const source = [
-      "import { css, styled } from 'yak'",
+      "import { css, styled } from 'next-yak'",
       'const Panel = styled.div`',
       '  ${({ active }) => active && css`',
       '    color: red;',
@@ -402,7 +418,7 @@ describe('findTemplate', () => {
 
   it('does not terminate interpolations on braces in strings, comments, or nested templates', () => {
     const source = [
-      "import { styled } from 'yak'",
+      "import { styled } from 'next-yak'",
       'const Panel = styled.div`',
       '  color: ${({ tone }) => {',
       '    const closingBrace = "}";',
@@ -425,7 +441,7 @@ describe('findTemplate', () => {
 
   it('does not terminate interpolations on braces inside regular expression literals', () => {
     const source = [
-      "import { styled } from 'yak'",
+      "import { styled } from 'next-yak'",
       'const Panel = styled.div`',
       `  color: \${/[}]/.test(tone) ? 'red' : 'blue'};`,
       `  background: blue;${cursorMarker}`,
@@ -441,7 +457,7 @@ describe('findTemplate', () => {
 
   it('does not mistake division expressions for regular expression literals', () => {
     const source = [
-      "import { styled } from 'yak'",
+      "import { styled } from 'next-yak'",
       'const Panel = styled.div`',
       `  width: \${size / 2};`,
       `  background: blue;${cursorMarker}`,
@@ -456,7 +472,7 @@ describe('findTemplate', () => {
 
   it('preserves CRLF line endings while masking interpolations', () => {
     const source = [
-      "import { styled } from 'yak'",
+      "import { styled } from 'next-yak'",
       'const Panel = styled.div`',
       '  color: ${accent};',
       `  background: blue;${cursorMarker}`,
@@ -476,14 +492,18 @@ describe('findTemplate', () => {
 
   it('does not throw for incomplete templates, interpolations, or malformed TSX', () => {
     const cases = [
-      ["import { styled } from 'yak'", 'const Panel = styled.div`', `  color: re${cursorMarker}`],
       [
-        "import { styled } from 'yak'",
+        "import { styled } from 'next-yak'",
+        'const Panel = styled.div`',
+        `  color: re${cursorMarker}`,
+      ],
+      [
+        "import { styled } from 'next-yak'",
         'const Panel = styled.div`',
         `  color: \${({ theme }) => theme.${cursorMarker}`,
       ],
       [
-        "import { styled } from 'yak'",
+        "import { styled } from 'next-yak'",
         'const Panel = <div>',
         '  {styled.div`',
         `    color: red;${cursorMarker}`,
@@ -498,12 +518,12 @@ describe('findTemplate', () => {
 
   it('rejects cursors in unfinished interpolations while retaining static incomplete templates', () => {
     const unfinishedInterpolation = sourceWithCursor([
-      "import { styled } from 'yak'",
+      "import { styled } from 'next-yak'",
       'const Panel = styled.div`',
       `  color: \${({ theme }) => theme.${cursorMarker}`,
     ])
     const unfinishedTemplate = sourceWithCursor([
-      "import { styled } from 'yak'",
+      "import { styled } from 'next-yak'",
       'const Panel = styled.div`',
       `  col${cursorMarker}`,
     ])
@@ -517,7 +537,7 @@ describe('TemplateCache', () => {
   it('lists all recognized templates from one cached semantic analysis', () => {
     const cache = new TemplateCache()
     const source = [
-      "import { css, styled } from 'yak'",
+      "import { css, styled } from 'next-yak'",
       'const First = styled.div`color: red;`',
       'const Second = css`background: blue;`',
     ].join('\n')
@@ -538,7 +558,7 @@ describe('TemplateCache', () => {
   it('skips a template with an unfinished interpolation while retaining other templates', () => {
     const cache = new TemplateCache()
     const source = [
-      "import { css, styled } from 'yak'",
+      "import { css, styled } from 'next-yak'",
       'const First = styled.div`color: ${theme.',
       'const Second = css`background: blue;`',
     ].join('\n')
@@ -570,9 +590,12 @@ describe('TemplateCache', () => {
     const cache = new TemplateCache()
     const initial = templateCacheRequest(styledSource('styled.div'), 1)
     const modified = templateCacheRequest(
-      ["import { css } from 'yak'", 'const Value = styled.div`', `  col${cursorMarker}`, '`'].join(
-        '\n',
-      ),
+      [
+        "import { css } from 'next-yak'",
+        'const Value = styled.div`',
+        `  col${cursorMarker}`,
+        '`',
+      ].join('\n'),
       2,
       initial.document.uri,
     )
@@ -586,9 +609,12 @@ describe('TemplateCache', () => {
     const cache = new TemplateCache()
     const initial = templateCacheRequest(styledSource('styled.div'), 1)
     const reopened = templateCacheRequest(
-      ["import { css } from 'yak'", 'const Value = styled.div`', `  col${cursorMarker}`, '`'].join(
-        '\n',
-      ),
+      [
+        "import { css } from 'next-yak'",
+        'const Value = styled.div`',
+        `  col${cursorMarker}`,
+        '`',
+      ].join('\n'),
       1,
       initial.document.uri,
     )
@@ -709,7 +735,7 @@ describe('virtual CSS mapping', () => {
 
   it('extracts an incomplete selector line for pseudo completion', () => {
     const source = [
-      "import { styled } from 'yak'",
+      "import { styled } from 'next-yak'",
       'const Link = styled.a`',
       `  a:${cursorMarker}`,
       '`',
@@ -730,7 +756,7 @@ describe('virtual CSS mapping', () => {
 
     for (const line of cases) {
       const found = sourceWithCursor([
-        "import { styled } from 'yak'",
+        "import { styled } from 'next-yak'",
         'const Value = styled.div`',
         `  ${line}${cursorMarker}`,
         '`',
@@ -745,7 +771,7 @@ describe('virtual CSS mapping', () => {
 
   it('classifies at-rule names, preludes, grouped rules, and descriptors', () => {
     const name = sourceWithCursor([
-      "import { styled } from 'yak'",
+      "import { styled } from 'next-yak'",
       'const Value = styled.div`',
       `  @med${cursorMarker}`,
       '`',
@@ -759,7 +785,7 @@ describe('virtual CSS mapping', () => {
     })
 
     const nestedName = sourceWithCursor([
-      "import { styled } from 'yak'",
+      "import { styled } from 'next-yak'",
       'const Value = styled.div`',
       '  @media (min-width: 48rem) {',
       `    @sup${cursorMarker}`,
@@ -777,7 +803,7 @@ describe('virtual CSS mapping', () => {
     })
 
     const globalName = sourceWithCursor([
-      "import { globalStyle } from 'yak'",
+      "import { globalStyle } from 'next-yak'",
       'const styles = globalStyle`',
       `  @pro${cursorMarker}`,
       '`',
@@ -793,7 +819,7 @@ describe('virtual CSS mapping', () => {
     })
 
     const prelude = sourceWithCursor([
-      "import { styled } from 'yak'",
+      "import { styled } from 'next-yak'",
       'const Value = styled.div`',
       `  @media ${cursorMarker}`,
       '`',
@@ -803,7 +829,7 @@ describe('virtual CSS mapping', () => {
     ).toEqual({ kind: 'prelude' })
 
     const groupedRule = sourceWithCursor([
-      "import { styled } from 'yak'",
+      "import { styled } from 'next-yak'",
       'const Value = styled.div`',
       '  @media (min-width: 48rem) {',
       `    dis${cursorMarker}`,
@@ -819,7 +845,7 @@ describe('virtual CSS mapping', () => {
     ).toEqual({ kind: 'rule' })
 
     const descriptor = sourceWithCursor([
-      "import { globalStyle } from 'yak'",
+      "import { globalStyle } from 'next-yak'",
       'const Value = globalStyle`',
       '  @property --size {',
       `    syn${cursorMarker}`,
@@ -841,7 +867,7 @@ describe('virtual CSS mapping', () => {
 
     for (const line of cases) {
       const found = sourceWithCursor([
-        "import { styled } from 'yak'",
+        "import { styled } from 'next-yak'",
         'const Value = styled.div`',
         `  ${line}${cursorMarker}`,
         '`',
@@ -854,7 +880,7 @@ describe('virtual CSS mapping', () => {
 
     for (const lines of [
       [
-        "import { styled } from 'yak'",
+        "import { styled } from 'next-yak'",
         'const Value = styled.div`',
         '  @property --size {',
         `    @med${cursorMarker}`,
@@ -862,7 +888,7 @@ describe('virtual CSS mapping', () => {
         '`',
       ],
       [
-        "import { styled } from 'yak'",
+        "import { styled } from 'next-yak'",
         'const Value = styled.div`',
         '  @property --size {',
         `    syn${cursorMarker}`,
@@ -870,14 +896,19 @@ describe('virtual CSS mapping', () => {
         '`',
       ],
       [
-        "import { styled } from 'yak'",
+        "import { styled } from 'next-yak'",
         'const Value = styled.div`',
         '  @keyframes spin {',
         `    @med${cursorMarker}`,
         '  }',
         '`',
       ],
-      ["import { keyframes } from 'yak'", 'const spin = keyframes`', `  @med${cursorMarker}`, '`'],
+      [
+        "import { keyframes } from 'next-yak'",
+        'const spin = keyframes`',
+        `  @med${cursorMarker}`,
+        '`',
+      ],
     ]) {
       const found = sourceWithCursor(lines)
 
@@ -893,7 +924,7 @@ describe('virtual CSS mapping', () => {
     ['button:dis', 'button:dis'],
   ])('preserves complex selector text for %s pseudo completion', (selector, expectedText) => {
     const found = sourceWithCursor([
-      "import { styled } from 'yak'",
+      "import { styled } from 'next-yak'",
       'const Value = styled.div`',
       `  ${selector}${cursorMarker}`,
       '`',

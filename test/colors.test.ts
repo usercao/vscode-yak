@@ -39,7 +39,9 @@ function getTemplate(source: string, needle: string): Template {
 }
 
 function styledSource(css: string): string {
-  return ["import { styled } from 'yak'", 'const Panel = styled.div`', `  ${css}`, '`'].join('\n')
+  return ["import { styled } from 'next-yak'", 'const Panel = styled.div`', `  ${css}`, '`'].join(
+    '\n',
+  )
 }
 
 function colorInformation(

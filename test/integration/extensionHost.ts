@@ -183,7 +183,7 @@ async function completionItems({
 function styledSource(
   prefix = 'col',
   tagExpression = 'styled.div',
-  importStatement = "import { styled } from 'yak'",
+  importStatement = "import { styled } from 'next-yak'",
 ): string {
   return [
     importStatement,
@@ -196,7 +196,7 @@ function styledSource(
 function atRuleSource(
   prefix: string,
   tagExpression = 'styled.div',
-  importStatement = "import { styled } from 'yak'",
+  importStatement = "import { styled } from 'next-yak'",
 ): string {
   return [
     importStatement,
@@ -230,7 +230,7 @@ async function assertPseudoCompletion(
 ): Promise<void> {
   const { document, items } = await completionItems({
     source: [
-      "import { styled } from 'yak'",
+      "import { styled } from 'next-yak'",
       'const Link = styled.a`',
       `  ${selector}${cursorMarker}`,
       '`',
@@ -535,7 +535,7 @@ export async function run(): Promise<void> {
   await runCase('completes supported yak tagged template forms', async () => {
     await assertPropertyCompletion({
       source: [
-        "import { globalStyle } from 'yak'",
+        "import { globalStyle } from 'next-yak'",
         'globalStyle`',
         `  col${cursorMarker}`,
         '`',
@@ -543,7 +543,7 @@ export async function run(): Promise<void> {
     })
     await assertPropertyCompletion({
       source: [
-        "import { keyframes } from 'yak'",
+        "import { keyframes } from 'next-yak'",
         'const fade = keyframes`',
         '  from {',
         `    op${cursorMarker}`,
@@ -554,7 +554,7 @@ export async function run(): Promise<void> {
     })
     await assertPropertyCompletion({
       source: [
-        "import { styled } from 'yak'",
+        "import { styled } from 'next-yak'",
         'const Component = () => null',
         'const Panel = styled(Component)`',
         `  col${cursorMarker}`,
@@ -573,13 +573,19 @@ export async function run(): Promise<void> {
       ),
     })
     await assertPropertyCompletion({
-      source: styledSource('col', 'yak.styled.div', "import * as yak from 'yak'"),
+      source: styledSource('col', 'yak.styled.div', "import * as yak from 'next-yak'"),
     })
   })
 
   await runCase('completes current next-yak and styled-components templates', async () => {
     await assertPropertyCompletion({
       source: styledSource('col', 'styled.div', "import { styled } from 'next-yak'"),
+    })
+    await assertPropertyCompletion({
+      source: styledSource('col', 'styled.div', "import { styled } from '@yak/react'"),
+    })
+    await assertPropertyCompletion({
+      source: styledSource('col', 'styled.div', "import { styled } from '@yak/solid'"),
     })
     await assertPropertyCompletion({
       source: styledSource('col', 'styled.button', "import styled from 'styled-components'"),
@@ -592,6 +598,12 @@ export async function run(): Promise<void> {
         '`',
       ].join('\n'),
     })
+  })
+
+  await runCase('does not recognize the removed yak package name', async () => {
+    await assertNoExtensionCompletion(
+      styledSource('col', 'styled.div', "import { styled } from 'yak'"),
+    )
   })
 
   await runCase('honors configured template library profiles', async () => {
@@ -718,7 +730,7 @@ export async function run(): Promise<void> {
   await runCase('completes CSS prop and nearest nested templates', async () => {
     await assertPropertyCompletion({
       source: [
-        "import { css } from 'yak'",
+        "import { css } from 'next-yak'",
         'const view = <section css={css`',
         `  col${cursorMarker}`,
         '`} />',
@@ -726,7 +738,7 @@ export async function run(): Promise<void> {
     })
     await assertPropertyCompletion({
       source: [
-        "import * as yak from 'yak'",
+        "import * as yak from 'next-yak'",
         'const view = <section css={yak.css`',
         `  col${cursorMarker}`,
         '`} />',
@@ -735,7 +747,7 @@ export async function run(): Promise<void> {
 
     const { document, item } = await assertPropertyCompletion({
       source: [
-        "import { css, styled } from 'yak'",
+        "import { css, styled } from 'next-yak'",
         'const Panel = styled.div`',
         '  ${({ active }) => active && css`',
         `    col${cursorMarker}`,
@@ -749,7 +761,7 @@ export async function run(): Promise<void> {
   await runCase('maps replacement ranges and snippets inside multiline templates', async () => {
     const replacement = await assertPropertyCompletion({
       source: [
-        "import { styled } from 'yak'",
+        "import { styled } from 'next-yak'",
         'const Panel = styled.div`',
         '  display: grid;',
         `  col${cursorMarker}`,
@@ -787,7 +799,7 @@ export async function run(): Promise<void> {
   await runCase('does not use pseudo fallback in declaration and at-rule contexts', async () => {
     const sourceForLine = (line: string): string =>
       [
-        "import { styled } from 'yak'",
+        "import { styled } from 'next-yak'",
         'const Panel = styled.div`',
         `  ${line}${cursorMarker}`,
         '`',
@@ -814,7 +826,7 @@ export async function run(): Promise<void> {
     await assertAtRuleCompletion(atRuleSource('@med'), '@media', '@med')
 
     const global = await assertAtRuleCompletion(
-      atRuleSource('@', 'globalStyle', "import { globalStyle } from 'yak'"),
+      atRuleSource('@', 'globalStyle', "import { globalStyle } from 'next-yak'"),
       '@font-face',
       '@',
     )
@@ -836,7 +848,7 @@ export async function run(): Promise<void> {
     async () => {
       const nested = await assertPropertyCompletion({
         source: [
-          "import { styled } from 'yak'",
+          "import { styled } from 'next-yak'",
           'const Panel = styled.div`',
           '  @media (min-width: 48rem) {',
           `    dis${cursorMarker}`,
@@ -856,7 +868,7 @@ export async function run(): Promise<void> {
 
       await assertAtRuleCompletion(
         [
-          "import { styled } from 'yak'",
+          "import { styled } from 'next-yak'",
           'const Panel = styled.div`',
           '  @media (min-width: 48rem) {',
           `    @sup${cursorMarker}`,
@@ -869,7 +881,7 @@ export async function run(): Promise<void> {
 
       const descriptor = await assertAtRuleCompletion(
         [
-          "import { globalStyle } from 'yak'",
+          "import { globalStyle } from 'next-yak'",
           'const Panel = globalStyle`',
           '  @property --size {',
           `    syn${cursorMarker}`,
@@ -890,7 +902,7 @@ export async function run(): Promise<void> {
 
       const fontFace = await assertAtRuleCompletion(
         [
-          "import { globalStyle } from 'yak'",
+          "import { globalStyle } from 'next-yak'",
           'const Panel = globalStyle`',
           '  @font-face {',
           `    font-f${cursorMarker}`,
@@ -915,7 +927,7 @@ export async function run(): Promise<void> {
         atRuleSource('content: "@med'),
         atRuleSource('background: url(@med'),
         [
-          "import { styled } from 'yak'",
+          "import { styled } from 'next-yak'",
           'const Panel = styled.div`',
           '  @property --size {',
           `    @med${cursorMarker}`,
@@ -923,7 +935,7 @@ export async function run(): Promise<void> {
           '`',
         ].join('\n'),
         [
-          "import { styled } from 'yak'",
+          "import { styled } from 'next-yak'",
           'const Panel = styled.div`',
           '  @property --size {',
           `    syn${cursorMarker}`,
@@ -931,13 +943,13 @@ export async function run(): Promise<void> {
           '`',
         ].join('\n'),
         [
-          "import { styled } from 'yak'",
+          "import { styled } from 'next-yak'",
           'const Panel = styled.div`',
           `  color: \${value.${cursorMarker}accent};`,
           '`',
         ].join('\n'),
         [
-          "import { keyframes } from 'yak'",
+          "import { keyframes } from 'next-yak'",
           'const spin = keyframes`',
           `  @med${cursorMarker}`,
           '`',
@@ -950,9 +962,9 @@ export async function run(): Promise<void> {
 
   await runCase('rejects type-only, locally shadowed, and dynamic yak tags', async () => {
     for (const source of [
-      styledSource('col', 'styled.div', "import type { styled } from 'yak'"),
+      styledSource('col', 'styled.div', "import type { styled } from 'next-yak'"),
       [
-        "import { styled } from 'yak'",
+        "import { styled } from 'next-yak'",
         'function create(styled) {',
         '  return styled.a`',
         `    col${cursorMarker}`,
@@ -960,7 +972,7 @@ export async function run(): Promise<void> {
         '}',
       ].join('\n'),
       [
-        "import { styled } from 'yak'",
+        "import { styled } from 'next-yak'",
         "const tagName = 'div'",
         'const Panel = styled[tagName]`',
         `  col${cursorMarker}`,
@@ -1005,7 +1017,7 @@ export async function run(): Promise<void> {
       document.positionAt(document.getText().indexOf('\n') + 1),
     )
 
-    await editor.edit((edit) => edit.replace(importRange, "import { css } from 'yak'\n"))
+    await editor.edit((edit) => edit.replace(importRange, "import { css } from 'next-yak'\n"))
 
     const updatedItems = await completionItemsAt(document, cursorOffset)
     assert.equal(
@@ -1022,7 +1034,7 @@ export async function run(): Promise<void> {
       const requestFor = async (
         css: string,
         tag = 'styled.div',
-        importStatement = "import { styled } from 'yak'",
+        importStatement = "import { styled } from 'next-yak'",
       ) => {
         const request = await directProviderRequest(styledSource(css, tag, importStatement))
 
@@ -1064,7 +1076,7 @@ export async function run(): Promise<void> {
       const keyframes = await requestFor(
         'from { op/*cursor*/acity: 0; }',
         'keyframes',
-        "import { keyframes } from 'yak'",
+        "import { keyframes } from 'next-yak'",
       )
       assert.ok(keyframes.hover, 'Expected a keyframes property hover')
       assert.match(hoverContentText(keyframes.hover), /MDN Reference/)
@@ -1093,7 +1105,7 @@ export async function run(): Promise<void> {
     'surfaces mapped CSS diagnostics and filters interpolation-adjacent false positives',
     async () => {
       const source = [
-        "import { styled } from 'yak'",
+        "import { styled } from 'next-yak'",
         'const Panel = styled.div`',
         '  color: ${theme.accent};',
         '  colro: red;',
@@ -1122,7 +1134,7 @@ export async function run(): Promise<void> {
     'updates diagnostics after edits, language changes, close, and configuration changes',
     async () => {
       const source = [
-        "import { styled } from 'yak'",
+        "import { styled } from 'next-yak'",
         'const Panel = styled.div`',
         '  colro: red;',
         '`',
@@ -1245,7 +1257,7 @@ export async function run(): Promise<void> {
     'offers a safe mapped CSS spelling quick fix and rejects interpolation fixes',
     async () => {
       const source = [
-        "import { styled } from 'yak'",
+        "import { styled } from 'next-yak'",
         'const Panel = styled.div`',
         '  colro: red;',
         '  color: ${theme.accent};',
@@ -1318,7 +1330,7 @@ export async function run(): Promise<void> {
     'keeps multiple CSS spelling fixes independent and skips diagnostics without fixes',
     async () => {
       const source = [
-        "import { styled } from 'yak'",
+        "import { styled } from 'next-yak'",
         'const Panel = styled.div`',
         '  colro: red;',
         '  bakground: blue;',
@@ -1338,7 +1350,17 @@ export async function run(): Promise<void> {
       assert.ok(bakground, 'Expected the second unknown-property diagnostic')
       assert.ok(unclosedValue, 'Expected an unclosed-value diagnostic')
 
-      const colroActions = await registeredCodeActionsAt(document, colro.range)
+      const colroActions =
+        provider.provideCodeActions(
+          document,
+          colro.range,
+          {
+            diagnostics: [colro],
+            only: vscode.CodeActionKind.QuickFix,
+            triggerKind: vscode.CodeActionTriggerKind.Invoke,
+          },
+          neverCancelledToken,
+        ) ?? []
       const colroAction = colroActions.find((action) => action.title === "Rename to 'color'")
       assert.ok(colroAction, 'Expected a color rename for colro')
       assert.deepEqual(
@@ -1349,7 +1371,17 @@ export async function run(): Promise<void> {
         [['colro', 'color']],
       )
 
-      const bakgroundActions = await registeredCodeActionsAt(document, bakground.range)
+      const bakgroundActions =
+        provider.provideCodeActions(
+          document,
+          bakground.range,
+          {
+            diagnostics: [bakground],
+            only: vscode.CodeActionKind.QuickFix,
+            triggerKind: vscode.CodeActionTriggerKind.Invoke,
+          },
+          neverCancelledToken,
+        ) ?? []
       const bakgroundAction = bakgroundActions.find(
         (action) => action.title === "Rename to 'background'",
       )
@@ -1381,7 +1413,7 @@ export async function run(): Promise<void> {
 
   await runCase('provides safe mapped CSS colors and picker presentations', async () => {
     const source = [
-      "import { styled } from 'yak'",
+      "import { styled } from 'next-yak'",
       'const Panel = styled.div`',
       '  color: #663399;',
       '  outline-color: rgba(23, 107, 91, 0.5);',
@@ -1506,7 +1538,7 @@ export async function run(): Promise<void> {
     async () => {
       const incompleteTemplate = await assertPropertyCompletion({
         source: [
-          "import { styled } from 'yak'",
+          "import { styled } from 'next-yak'",
           'const Panel = styled.div`',
           `  col${cursorMarker}`,
         ].join('\n'),
@@ -1515,7 +1547,7 @@ export async function run(): Promise<void> {
 
       const malformedTsx = await assertPropertyCompletion({
         source: [
-          "import { styled } from 'yak'",
+          "import { styled } from 'next-yak'",
           'const view = <section>',
           '  {styled.div`',
           `    col${cursorMarker}`,
@@ -1526,7 +1558,7 @@ export async function run(): Promise<void> {
 
       const interpolation = await completionItems({
         source: [
-          "import { styled } from 'yak'",
+          "import { styled } from 'next-yak'",
           'const Panel = styled.div`',
           `  color: \${({ theme }) => theme.${cursorMarker}`,
         ].join('\n'),
@@ -1570,7 +1602,7 @@ export async function run(): Promise<void> {
 
   await runCase('keeps completion requests independent across multiple cursors', async () => {
     const source = [
-      "import { styled } from 'yak'",
+      "import { styled } from 'next-yak'",
       'const Panel = styled.div`',
       '  col',
       '  dis',
@@ -1885,7 +1917,7 @@ export async function run(): Promise<void> {
     )
 
     const largeSource = [
-      "import { styled } from 'yak'",
+      "import { styled } from 'next-yak'",
       ...Array.from(
         { length: largeDocumentTemplateCount },
         (_, index) => `const Panel${index} = styled.div\`color: red;\``,

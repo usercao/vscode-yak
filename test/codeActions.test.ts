@@ -7,7 +7,9 @@ import type { VirtualCssDocument } from '../src/hover'
 import { createVirtualCssText, findTemplate, type Template } from '../src/template'
 
 function styledSource(css: string): string {
-  return ["import { styled } from 'yak'", 'const Panel = styled.div`', `  ${css}`, '`'].join('\n')
+  return ["import { styled } from 'next-yak'", 'const Panel = styled.div`', `  ${css}`, '`'].join(
+    '\n',
+  )
 }
 
 function createTemplate(source: string, needle: string): Template {

@@ -26,7 +26,7 @@ const yakTags = {
 export const templateLibraryProfiles: readonly TemplateLibraryProfile[] = [
   {
     id: 'yak',
-    moduleSpecifiers: ['next-yak', '@yak/react', 'yak'],
+    moduleSpecifiers: ['next-yak', '@yak/react', '@yak/solid'],
     namedImports: yakTags,
     namespaceImports: yakTags,
     staticGrammar: {

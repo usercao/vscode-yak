@@ -81,7 +81,7 @@
           },
           "uniqueItems": true,
           "scope": "resource",
-          "markdownDescription": "Select the CSS-in-JS template library profiles recognized by this extension. The `yak` profile supports `next-yak`, `@yak/react`, and `yak` imports."
+          "markdownDescription": "Select the CSS-in-JS template library profiles recognized by this extension. The `yak` profile supports `next-yak`, `@yak/react`, and `@yak/solid` imports."
         }
       }
     },

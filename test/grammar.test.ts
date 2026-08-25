@@ -182,8 +182,8 @@ describe('yak TextMate grammar', () => {
 
     let ruleStack = INITIAL
     const lines = [
-      "import { globalStyle, keyframes, styled } from 'yak'",
-      "import * as yak from 'yak'",
+      "import { globalStyle, keyframes, styled } from 'next-yak'",
+      "import * as yak from 'next-yak'",
       'const Attrs = styled.div.attrs({ role: createRole("region") })`',
       '  color: red;',
       '`',
@@ -240,7 +240,7 @@ describe('yak TextMate grammar', () => {
 
       let ruleStack = INITIAL
       const lines = [
-        "import { styled } from 'yak'",
+        "import { styled } from 'next-yak'",
         'type Props = { tone: string }',
         'const Generic = styled.div<Props>`',
         '  color: red;',
@@ -290,8 +290,8 @@ describe('yak TextMate grammar', () => {
 
     let ruleStack = INITIAL
     const lines = [
-      "import { css } from 'yak'",
-      "import * as yak from 'yak'",
+      "import { css } from 'next-yak'",
+      "import * as yak from 'next-yak'",
       'const Direct = <section css={css`',
       '  color: red;',
       '`} />',
@@ -406,7 +406,7 @@ describe('yak TextMate grammar', () => {
 
       let ruleStack = INITIAL
       const lines = [
-        "import { styled } from 'yak'",
+        "import { styled } from 'next-yak'",
         'const Link = styled.a`',
         '  a:hover',
         '  a::before',
@@ -468,7 +468,7 @@ describe('yak TextMate grammar', () => {
       })
     }
     const lines = [
-      "import { keyframes } from 'yak'",
+      "import { keyframes } from 'next-yak'",
       'const spin = keyframes`',
       '  from { transform: rotate(0deg); }',
       '  0%, 50%, 72%, 100% { opacity: 0.5; }',
@@ -505,7 +505,7 @@ describe('yak TextMate grammar', () => {
     )
 
     const incompleteLines = [
-      "import { keyframes } from 'yak'",
+      "import { keyframes } from 'next-yak'",
       'const spin = keyframes`',
       '  50',
       '`',
@@ -518,7 +518,7 @@ describe('yak TextMate grammar', () => {
     ).not.toContain('source.css')
 
     const openStepLines = [
-      "import { keyframes } from 'yak'",
+      "import { keyframes } from 'next-yak'",
       'const spin = keyframes`',
       '  from {',
       '`',
