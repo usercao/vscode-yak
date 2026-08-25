@@ -128,6 +128,19 @@ function styledSource(
   ].join('\n')
 }
 
+function atRuleSource(
+  prefix: string,
+  tagExpression = 'styled.div',
+  importStatement = "import { styled } from 'next-yak'",
+): string {
+  return [
+    importStatement,
+    `const Panel = ${tagExpression}\``,
+    `  ${prefix}${cursorMarker}`,
+    '`',
+  ].join('\n')
+}
+
 async function assertPropertyCompletion(options: PropertyCompletionOptions): Promise<{
   document: vscode.TextDocument
   item: vscode.CompletionItem
@@ -161,6 +174,27 @@ async function assertPseudoCompletion(selector: string, expectedLabel: string, e
   assert.equal(completionInsertText(item), expectedInsertText)
 }
 
+async function assertAtRuleCompletion(
+  source: string,
+  expectedLabel: string,
+  expectedReplacement: string,
+  expectedInsertText = expectedLabel,
+): Promise<{
+  document: vscode.TextDocument
+  item: vscode.CompletionItem
+  items: readonly vscode.CompletionItem[]
+}> {
+  const { document, items } = await completionItems({ source })
+  const item = findNextYakItem(items, expectedLabel)
+
+  assert.ok(item, `Expected next-yak ${expectedLabel} completion in ${nextYakItems(items).map(completionLabel).join(', ')}`)
+  assertRangeWithinDocument(document, item)
+  assert.equal(document.getText(completionRange(item)), expectedReplacement)
+  assert.equal(completionInsertText(item), expectedInsertText)
+
+  return { document, item, items }
+}
+
 async function assertNoPseudoFallback(source: string): Promise<void> {
   const { items } = await completionItems({ source })
   const pseudoLabels = nextYakItems(items)
@@ -168,6 +202,22 @@ async function assertNoPseudoFallback(source: string): Promise<void> {
     .filter((label) => label.startsWith(':'))
 
   assert.deepEqual(pseudoLabels, [], `Expected no next-yak pseudo fallback, received ${pseudoLabels.join(', ')}`)
+}
+
+async function assertNoAtRuleCompletion(source: string): Promise<void> {
+  const { items } = await completionItems({ source })
+  const atRuleLabels = nextYakItems(items)
+    .map(completionLabel)
+    .filter((label) => label.startsWith('@'))
+
+  assert.deepEqual(atRuleLabels, [], `Expected no next-yak at-rule completion, received ${atRuleLabels.join(', ')}`)
+}
+
+async function assertNoNextYakCompletion(source: string): Promise<void> {
+  const { items } = await completionItems({ source })
+  const labels = nextYakItems(items).map(completionLabel)
+
+  assert.deepEqual(labels, [], `Expected no next-yak completion, received ${labels.join(', ')}`)
 }
 
 async function runCase(name: string, callback: () => Promise<void>): Promise<void> {
@@ -383,7 +433,157 @@ export async function run(): Promise<void> {
     await assertNoPseudoFallback(sourceForLine('unknown: value'))
     await assertNoPseudoFallback(sourceForLine('color: re'))
     await assertNoPseudoFallback(sourceForLine('@media '))
+    await assertNoNextYakCompletion(sourceForLine('@media '))
     await assertNoPseudoFallback(sourceForLine('--accent:'))
+  })
+
+  await runCase('completes standard at-rule names with safe replacement ranges', async () => {
+    const root = await assertAtRuleCompletion(atRuleSource('@'), '@media', '@')
+    const rootLabels = new Set(nextYakItems(root.items).map(completionLabel))
+
+    for (const label of [
+      '@media',
+      '@supports',
+      '@container',
+      '@layer',
+      '@scope',
+      '@keyframes',
+    ]) {
+      assert.ok(rootLabels.has(label), `Expected ${label} in standard at-rule candidates`)
+    }
+    for (const label of ['@font-face', '@property', '@charset', '@import', '@namespace']) {
+      assert.ok(!rootLabels.has(label), `Expected ${label} to be unavailable inside a styled rule`)
+    }
+
+    await assertAtRuleCompletion(atRuleSource('@med'), '@media', '@med')
+
+    const global = await assertAtRuleCompletion(
+      atRuleSource('@', 'globalStyle', "import { globalStyle } from 'next-yak'"),
+      '@font-face',
+      '@',
+    )
+    const globalLabels = new Set(nextYakItems(global.items).map(completionLabel))
+
+    for (const label of ['@font-face', '@property', '@counter-style', '@page']) {
+      assert.ok(globalLabels.has(label), `Expected ${label} in globalStyle at-rule candidates`)
+    }
+    for (const label of ['@charset', '@import', '@namespace']) {
+      assert.ok(!globalLabels.has(label), `Expected ${label} to remain unavailable in a tagged template`)
+    }
+  })
+
+  await runCase('keeps at-rule completions scoped to valid names and nested rule bodies', async () => {
+    const nested = await assertPropertyCompletion({
+      source: [
+        "import { styled } from 'next-yak'",
+        'const Panel = styled.div`',
+        '  @media (min-width: 48rem) {',
+        `    dis${cursorMarker}`,
+        '  }',
+        '`',
+      ].join('\n'),
+      expectedLabel: 'display',
+    })
+    assert.equal(nested.document.getText(completionRange(nested.item)), 'dis')
+    assert.deepEqual(
+      nextYakItems(nested.items)
+        .map(completionLabel)
+        .filter((label) => label.startsWith('@') || label.startsWith(':')),
+      [],
+      'Expected only declaration-context candidates inside a media rule body',
+    )
+
+    await assertAtRuleCompletion(
+      [
+        "import { styled } from 'next-yak'",
+        'const Panel = styled.div`',
+        '  @media (min-width: 48rem) {',
+        `    @sup${cursorMarker}`,
+        '  }',
+        '`',
+      ].join('\n'),
+      '@supports',
+      '@sup',
+    )
+
+    const descriptor = await assertAtRuleCompletion(
+      [
+        "import { globalStyle } from 'next-yak'",
+        'const Panel = globalStyle`',
+        '  @property --size {',
+        `    syn${cursorMarker}`,
+        '  }',
+        '`',
+      ].join('\n'),
+      'syntax',
+      'syn',
+      'syntax: $0;',
+    )
+    assert.deepEqual(
+      nextYakItems(descriptor.items)
+        .map(completionLabel)
+        .filter((label) => label.startsWith('@')),
+      [],
+      'Expected no at-rule candidates inside a descriptor block',
+    )
+
+    const fontFace = await assertAtRuleCompletion(
+      [
+        "import { globalStyle } from 'next-yak'",
+        'const Panel = globalStyle`',
+        '  @font-face {',
+        `    font-f${cursorMarker}`,
+        '  }',
+        '`',
+      ].join('\n'),
+      'font-family',
+      'font-f',
+      'font-family: $0;',
+    )
+    assert.deepEqual(
+      nextYakItems(fontFace.items)
+        .map(completionLabel)
+        .filter((label) => label.startsWith('@')),
+      [],
+      'Expected no at-rule candidates inside a font-face descriptor block',
+    )
+
+    for (const source of [
+      atRuleSource('color: @'),
+      atRuleSource('/* @med'),
+      atRuleSource('content: "@med'),
+      atRuleSource('background: url(@med'),
+      [
+        "import { styled } from 'next-yak'",
+        'const Panel = styled.div`',
+        '  @property --size {',
+        `    @med${cursorMarker}`,
+        '  }',
+        '`',
+      ].join('\n'),
+      [
+        "import { styled } from 'next-yak'",
+        'const Panel = styled.div`',
+        '  @property --size {',
+        `    syn${cursorMarker}`,
+        '  }',
+        '`',
+      ].join('\n'),
+      [
+        "import { styled } from 'next-yak'",
+        'const Panel = styled.div`',
+        `  color: \${value.${cursorMarker}accent};`,
+        '`',
+      ].join('\n'),
+      [
+        "import { keyframes } from 'next-yak'",
+        'const spin = keyframes`',
+        `  @med${cursorMarker}`,
+        '`',
+      ].join('\n'),
+    ]) {
+      await assertNoAtRuleCompletion(source)
+    }
   })
 
   await runCase('rejects type-only, locally shadowed, and dynamic next-yak tags', async () => {
@@ -568,6 +768,7 @@ export async function run(): Promise<void> {
   await runCase('stops cancelled completion work before and after CSS computation', async () => {
     const provider = await createDirectProvider(extension.extensionPath)
     const request = await directProviderRequest(styledSource())
+    const atRuleRequest = await directProviderRequest(atRuleSource('@med'))
 
     assert.equal(
       provider.provideCompletionItems(request.document, request.position, cancellationToken(1)),
@@ -578,6 +779,11 @@ export async function run(): Promise<void> {
       provider.provideCompletionItems(request.document, request.position, cancellationToken(2)),
       undefined,
       'Expected a request cancelled after CSS computation to discard stale items',
+    )
+    assert.equal(
+      provider.provideCompletionItems(atRuleRequest.document, atRuleRequest.position, cancellationToken(2)),
+      undefined,
+      'Expected an at-rule request cancelled after CSS computation to discard stale items',
     )
   })
 

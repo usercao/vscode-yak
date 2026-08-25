@@ -18,6 +18,7 @@ vi.mock('typescript', async (importOriginal) => {
 import {
   createVirtualCssText,
   findNextYakTemplate,
+  getAtRuleCompletionContext,
   getSelectorCompletionContext,
   mapVirtualRangeToSourceOffsets,
   NextYakTemplateCache,
@@ -564,6 +565,142 @@ describe('virtual CSS mapping', () => {
 
       expect(found.template).toBeDefined()
       expect(getSelectorCompletionContext(found.source, found.cursorOffset, found.template!)).toBeUndefined()
+    }
+  })
+
+  it('classifies at-rule names, preludes, grouped rules, and descriptors', () => {
+    const name = sourceWithCursor([
+      "import { styled } from 'next-yak'",
+      'const Value = styled.div`',
+      `  @med${cursorMarker}`,
+      '`',
+    ])
+    expect(getAtRuleCompletionContext(name.source, name.cursorOffset, name.template!)).toEqual({
+      allowsTopLevelRules: false,
+      kind: 'name',
+      nested: false,
+      sourceStart: name.source.indexOf('@med'),
+      text: '@med',
+    })
+
+    const nestedName = sourceWithCursor([
+      "import { styled } from 'next-yak'",
+      'const Value = styled.div`',
+      '  @media (min-width: 48rem) {',
+      `    @sup${cursorMarker}`,
+      '  }',
+      '`',
+    ])
+    expect(getAtRuleCompletionContext(nestedName.source, nestedName.cursorOffset, nestedName.template!)).toEqual({
+      allowsTopLevelRules: false,
+      kind: 'name',
+      nested: true,
+      sourceStart: nestedName.source.indexOf('@sup'),
+      text: '@sup',
+    })
+
+    const globalName = sourceWithCursor([
+      "import { globalStyle } from 'next-yak'",
+      'const styles = globalStyle`',
+      `  @pro${cursorMarker}`,
+      '`',
+    ])
+    expect(getAtRuleCompletionContext(globalName.source, globalName.cursorOffset, globalName.template!)).toEqual({
+      allowsTopLevelRules: true,
+      kind: 'name',
+      nested: false,
+      sourceStart: globalName.source.indexOf('@pro'),
+      text: '@pro',
+    })
+
+    const prelude = sourceWithCursor([
+      "import { styled } from 'next-yak'",
+      'const Value = styled.div`',
+      `  @media ${cursorMarker}`,
+      '`',
+    ])
+    expect(getAtRuleCompletionContext(prelude.source, prelude.cursorOffset, prelude.template!)).toEqual({ kind: 'prelude' })
+
+    const groupedRule = sourceWithCursor([
+      "import { styled } from 'next-yak'",
+      'const Value = styled.div`',
+      '  @media (min-width: 48rem) {',
+      `    dis${cursorMarker}`,
+      '  }',
+      '`',
+    ])
+    expect(getAtRuleCompletionContext(groupedRule.source, groupedRule.cursorOffset, groupedRule.template!)).toEqual({ kind: 'rule' })
+
+    const descriptor = sourceWithCursor([
+      "import { globalStyle } from 'next-yak'",
+      'const Value = globalStyle`',
+      '  @property --size {',
+      `    syn${cursorMarker}`,
+      '  }',
+      '`',
+    ])
+    expect(getAtRuleCompletionContext(descriptor.source, descriptor.cursorOffset, descriptor.template!)).toEqual({
+      atRuleName: '@property',
+      kind: 'descriptor',
+      sourceStart: descriptor.source.indexOf('syn'),
+      text: 'syn',
+    })
+  })
+
+  it('rejects at-rule completions in isolated or invalid CSS positions', () => {
+    const cases = [
+      'color: @',
+      '/* @med',
+      'content: "@med',
+      'background: url(@med',
+    ]
+
+    for (const line of cases) {
+      const found = sourceWithCursor([
+        "import { styled } from 'next-yak'",
+        'const Value = styled.div`',
+        `  ${line}${cursorMarker}`,
+        '`',
+      ])
+
+      expect(getAtRuleCompletionContext(found.source, found.cursorOffset, found.template!)).toBeUndefined()
+    }
+
+    for (const lines of [
+      [
+        "import { styled } from 'next-yak'",
+        'const Value = styled.div`',
+        '  @property --size {',
+        `    @med${cursorMarker}`,
+        '  }',
+        '`',
+      ],
+      [
+        "import { styled } from 'next-yak'",
+        'const Value = styled.div`',
+        '  @property --size {',
+        `    syn${cursorMarker}`,
+        '  }',
+        '`',
+      ],
+      [
+        "import { styled } from 'next-yak'",
+        'const Value = styled.div`',
+        '  @keyframes spin {',
+        `    @med${cursorMarker}`,
+        '  }',
+        '`',
+      ],
+      [
+        "import { keyframes } from 'next-yak'",
+        'const spin = keyframes`',
+        `  @med${cursorMarker}`,
+        '`',
+      ],
+    ]) {
+      const found = sourceWithCursor(lines)
+
+      expect(getAtRuleCompletionContext(found.source, found.cursorOffset, found.template!)).toEqual({ kind: 'blocked' })
     }
   })
 

@@ -4,6 +4,8 @@ import {
   getCSSLanguageService,
   type CompletionItem as CssCompletionItem,
   type Hover as CssHover,
+  type IAtDirectiveData,
+  type IPropertyData,
   type MarkedString,
   type MarkupContent,
   type Range as CssRange,
@@ -15,8 +17,10 @@ import {
 } from './nextYakHover'
 import {
   createVirtualCssText,
+  getAtRuleCompletionContext,
   getSelectorCompletionContext,
   mapVirtualRangeToSourceOffsets,
+  type AtRuleCompletionContext,
   NextYakTemplateCache,
   type NextYakTemplate,
   type SelectorCompletionContext,
@@ -26,6 +30,37 @@ const cssLanguageService = getCSSLanguageService()
 const cssPropertyNames = new Set(
   getDefaultCSSDataProvider().provideProperties().map((property) => property.name),
 )
+const cssAtDirectives = getDefaultCSSDataProvider().provideAtDirectives()
+const cssProperties = getDefaultCSSDataProvider().provideProperties()
+const globalStyleAtRuleNames = new Set([
+  '@container',
+  '@counter-style',
+  '@font-face',
+  '@font-feature-values',
+  '@font-palette-values',
+  '@keyframes',
+  '@layer',
+  '@media',
+  '@page',
+  '@position-try',
+  '@property',
+  '@scope',
+  '@starting-style',
+  '@supports',
+  '@view-transition',
+])
+const nestedAtRuleNames = new Set([
+  '@container',
+  '@keyframes',
+  '@layer',
+  '@media',
+  '@scope',
+  '@starting-style',
+  '@supports',
+])
+const descriptorFallbackPropertyNames = new Map<string, ReadonlySet<string>>([
+  ['@font-face', new Set(['font-family'])],
+])
 const nextYakDocumentSelector: vscode.DocumentSelector = [
   { language: 'javascript' },
   { language: 'javascriptreact' },
@@ -88,6 +123,7 @@ export class NextYakCssCompletionProvider implements vscode.CompletionItemProvid
     const virtualCss = createVirtualCssDocument(document, template)
     const virtualOffset = virtualCss.prefixLength + cursorOffset - template.bodyStart
     const stylesheet = cssLanguageService.parseStylesheet(virtualCss.document)
+    const atRuleContext = getAtRuleCompletionContext(source, cursorOffset, template)
     const completions = cssLanguageService.doComplete(
       virtualCss.document,
       virtualCss.document.positionAt(virtualOffset),
@@ -101,12 +137,14 @@ export class NextYakCssCompletionProvider implements vscode.CompletionItemProvid
     const selectorContext = getSelectorCompletionContext(source, cursorOffset, template)
     const usesSelectorFallback = selectorContext && isSelectorCompletionContext(selectorContext)
     const items = completions.items
-      .filter((item) => !usesSelectorFallback || !item.label.startsWith(':'))
+      .filter((item) => shouldIncludeCssCompletion(item, atRuleContext, Boolean(usesSelectorFallback)))
       .flatMap((item) => {
         const completion = toCompletionItem(item, document, virtualCss)
         return completion ? [completion] : []
       })
     const existingLabels = new Set(items.map((item) => typeof item.label === 'string' ? item.label : item.label.label))
+    const atRuleItems = getAtRuleCompletionItems(document, atRuleContext, existingLabels)
+    atRuleItems.forEach((item) => existingLabels.add(completionLabel(item)))
     const selectorItems = getSelectorCompletionItems(
       source,
       cursorOffset,
@@ -115,7 +153,7 @@ export class NextYakCssCompletionProvider implements vscode.CompletionItemProvid
       existingLabels,
     )
 
-    return new vscode.CompletionList([...items, ...selectorItems], true)
+    return new vscode.CompletionList([...items, ...atRuleItems, ...selectorItems], true)
   }
 }
 
@@ -209,6 +247,118 @@ function getSelectorCompletionItems(
       const completion = toSelectorCompletionItem(item, document, selectorDocument, selectorContext)
       return completion ? [completion] : []
     })
+}
+
+function shouldIncludeCssCompletion(
+  item: CssCompletionItem,
+  atRuleContext: AtRuleCompletionContext | undefined,
+  usesSelectorFallback: boolean,
+) {
+  if (
+    atRuleContext?.kind === 'blocked'
+    || atRuleContext?.kind === 'descriptor'
+    || atRuleContext?.kind === 'name'
+  ) {
+    return false
+  }
+
+  if (item.label.startsWith('@')) {
+    return false
+  }
+
+  if (atRuleContext?.kind === 'prelude') {
+    return false
+  }
+
+  if (
+    atRuleContext?.kind === 'rule'
+    || atRuleContext?.kind === 'descriptor-value'
+  ) {
+    return !item.label.startsWith(':')
+  }
+
+  return !usesSelectorFallback || !item.label.startsWith(':')
+}
+
+function getAtRuleCompletionItems(
+  document: vscode.TextDocument,
+  context: AtRuleCompletionContext | undefined,
+  existingLabels: ReadonlySet<string>,
+): vscode.CompletionItem[] {
+  if (
+    !context
+    || context.kind === 'blocked'
+    || context.kind === 'descriptor-value'
+    || context.kind === 'prelude'
+    || context.kind === 'rule'
+  ) {
+    return []
+  }
+
+  if (context.kind === 'descriptor') {
+    const fallbackPropertyNames = descriptorFallbackPropertyNames.get(context.atRuleName)
+
+    return cssProperties
+      .filter((property) => property.atRule === context.atRuleName || fallbackPropertyNames?.has(property.name))
+      .filter((property) => property.name.startsWith(context.text.toLowerCase()))
+      .filter((property) => !existingLabels.has(property.name))
+      .map((property) => toDataPropertyCompletionItem(property, document, context.sourceStart, context.text.length))
+  }
+
+  return cssAtDirectives
+    .filter((atRule) => (
+      nestedAtRuleNames.has(atRule.name)
+      || (context.allowsTopLevelRules && globalStyleAtRuleNames.has(atRule.name))
+    ))
+    .filter((atRule) => atRule.name.startsWith(context.text.toLowerCase()))
+    .filter((atRule) => !existingLabels.has(atRule.name))
+    .map((atRule) => toAtRuleCompletionItem(atRule, document, context.sourceStart, context.text.length))
+}
+
+function toAtRuleCompletionItem(
+  atRule: IAtDirectiveData,
+  document: vscode.TextDocument,
+  sourceStart: number,
+  sourceLength: number,
+) {
+  const completion = new vscode.CompletionItem(atRule.name, vscode.CompletionItemKind.Keyword)
+
+  completion.detail = 'CSS at-rule'
+  completion.documentation = toDocumentation(atRule.description)
+  completion.filterText = atRule.name
+  completion.range = new vscode.Range(
+    document.positionAt(sourceStart),
+    document.positionAt(sourceStart + sourceLength),
+  )
+  completion.insertText = atRule.name
+  completion.sortText = `!${atRule.name}`
+
+  return completion
+}
+
+function toDataPropertyCompletionItem(
+  property: IPropertyData,
+  document: vscode.TextDocument,
+  sourceStart: number,
+  sourceLength: number,
+) {
+  const completion = new vscode.CompletionItem(property.name, vscode.CompletionItemKind.Property)
+
+  completion.detail = property.syntax
+  completion.documentation = toDocumentation(property.description)
+  completion.filterText = property.name
+  completion.range = new vscode.Range(
+    document.positionAt(sourceStart),
+    document.positionAt(sourceStart + sourceLength),
+  )
+  completion.insertText = new vscode.SnippetString(`${property.name}: $0;`)
+  completion.sortText = `!${property.name}`
+
+  return completion
+}
+
+function completionLabel(item: vscode.CompletionItem) {
+  return typeof item.label === 'string' ? item.label : item.label.label
 }
 
 function isSelectorCompletionContext(context: SelectorCompletionContext) {

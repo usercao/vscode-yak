@@ -42,7 +42,7 @@
     {
       "name": "meta.embedded.block.css.next-yak",
       "contentName": "source.css",
-      "begin": "\\b(css|globalStyle|keyframes)\\s*(`)",
+      "begin": "\\b(css|globalStyle)\\s*(`)",
       "beginCaptures": {
         "1": {
           "name": "entity.name.function.tagged-template.next-yak"
@@ -74,9 +74,104 @@
           "include": "source.css"
         }
       ]
+    },
+    {
+      "name": "meta.embedded.block.css.next-yak",
+      "contentName": "source.css",
+      "begin": "\\b(keyframes)\\s*(`)",
+      "beginCaptures": {
+        "1": {
+          "name": "entity.name.function.tagged-template.next-yak"
+        },
+        "2": {
+          "name": "punctuation.definition.string.template.begin.next-yak"
+        }
+      },
+      "end": "`",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.template.end.next-yak"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#interpolation-js"
+        },
+        {
+          "include": "#keyframe-step"
+        },
+        {
+          "include": "#root-selector"
+        },
+        {
+          "include": "#root-incomplete-selector"
+        },
+        {
+          "include": "#root-declaration"
+        },
+        {
+          "include": "source.css"
+        }
+      ]
     }
   ],
   "repository": {
+    "keyframe-step": {
+      "patterns": [
+        {
+          "name": "meta.keyframe-step.css",
+          "begin": "(?m)^(\\s*)(from|to)(\\s*)(\\{)",
+          "beginCaptures": {
+            "2": {
+              "name": "entity.other.keyframe-offset.css"
+            },
+            "4": {
+              "name": "punctuation.section.property-list.begin.bracket.curly.css"
+            }
+          },
+          "end": "(\\})|(?=`)",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.section.property-list.end.bracket.curly.css"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#interpolation-js"
+            },
+            {
+              "include": "source.css#rule-list-innards"
+            }
+          ]
+        },
+        {
+          "name": "meta.keyframe-step.css",
+          "begin": "(?m)^(\\s*)((?:\\d+(?:\\.\\d+)?%)(?:\\s*,\\s*\\d+(?:\\.\\d+)?%)*)(\\s*)(\\{)",
+          "beginCaptures": {
+            "2": {
+              "name": "entity.other.keyframe-offset.percentage.css"
+            },
+            "4": {
+              "name": "punctuation.section.property-list.begin.bracket.curly.css"
+            }
+          },
+          "end": "(\\})|(?=`)",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.section.property-list.end.bracket.curly.css"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#interpolation-js"
+            },
+            {
+              "include": "source.css#rule-list-innards"
+            }
+          ]
+        }
+      ]
+    },
     "root-selector": {
       "begin": "(?m)^(?=\\s*(?:[^{}\\n]*)(?:::[-_a-zA-Z][-_a-zA-Z0-9]*|:[-_a-zA-Z][-_a-zA-Z0-9]*)(?:[^{}\\n]*)\\{)",
       "end": "(?=\\{)",

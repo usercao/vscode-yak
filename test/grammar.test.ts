@@ -140,6 +140,89 @@ describe('next-yak TextMate grammar', () => {
   })
 
   it.each([
+    ['TypeScript', 'source.ts'],
+    ['TypeScript React', 'source.tsx'],
+    ['JavaScript', 'source.js'],
+    ['JavaScript React', 'source.js.jsx'],
+  ])('highlights keyframe steps and preserves host syntax in %s', async (_, scopeName) => {
+    const grammar = await loadGrammar(scopeName)
+
+    if (!grammar) {
+      throw new Error(`Unable to load ${scopeName} grammar`)
+    }
+
+    const tokenize = (lines: readonly string[]) => {
+      let ruleStack = INITIAL
+
+      return lines.map((line) => {
+        const result = grammar.tokenizeLine(line, ruleStack)
+        ruleStack = result.ruleStack
+        return result.tokens
+      })
+    }
+    const lines = [
+      "import { keyframes } from 'next-yak'",
+      'const spin = keyframes`',
+      '  from { transform: rotate(0deg); }',
+      '  0%, 50%, 72%, 100% { opacity: 0.5; }',
+      '  to { transform: rotate(1turn); }',
+      '`',
+      'const after = true',
+    ]
+    const tokenizedLines = tokenize(lines)
+
+    for (const [lineIndex, text] of [
+      [2, 'from'],
+      [4, 'to'],
+    ] as const) {
+      expect(scopesAtOffset(lines[lineIndex], tokenizedLines[lineIndex], lines[lineIndex].indexOf(text))).toContain(
+        'entity.other.keyframe-offset.css',
+      )
+    }
+    for (const text of ['0%', '50%', '72%', '100%']) {
+      expect(scopesAtOffset(lines[3], tokenizedLines[3], lines[3].indexOf(text))).toContain(
+        'entity.other.keyframe-offset.percentage.css',
+      )
+    }
+    expect(scopesAtOffset(lines[2], tokenizedLines[2], lines[2].indexOf('transform'))).toContain(
+      'support.type.property-name.css',
+    )
+    expect(scopesAtOffset(lines[2], tokenizedLines[2], lines[2].indexOf('rotate'))).toContain(
+      'support.function.transform.css',
+    )
+    expect(scopesAtOffset(lines[3], tokenizedLines[3], lines[3].indexOf('opacity'))).toContain(
+      'support.type.property-name.css',
+    )
+    expect(scopesAtOffset(lines[6], tokenizedLines[6], lines[6].indexOf('const'))).not.toContain('source.css')
+
+    const incompleteLines = [
+      "import { keyframes } from 'next-yak'",
+      'const spin = keyframes`',
+      '  50',
+      '`',
+      'const after = true',
+    ]
+    const incompleteTokens = tokenize(incompleteLines)
+
+    expect(scopesAtOffset(incompleteLines[4], incompleteTokens[4], incompleteLines[4].indexOf('const'))).not.toContain(
+      'source.css',
+    )
+
+    const openStepLines = [
+      "import { keyframes } from 'next-yak'",
+      'const spin = keyframes`',
+      '  from {',
+      '`',
+      'const after = true',
+    ]
+    const openStepTokens = tokenize(openStepLines)
+
+    expect(scopesAtOffset(openStepLines[4], openStepTokens[4], openStepLines[4].indexOf('const'))).not.toContain(
+      'source.css',
+    )
+  })
+
+  it.each([
     ['TypeScript React', 'source.tsx'],
     ['JavaScript React', 'source.js.jsx'],
   ])('documents that %s highlighting can statically misidentify unrelated styled templates', async (_, scopeName) => {

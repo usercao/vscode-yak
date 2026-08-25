@@ -1,6 +1,6 @@
 # next-yak VS Code 扩展 TODO
 
-> 更新日期：2026-08-24。
+> 更新日期：2026-08-25。
 >
 > 本清单以当前仓库代码、单元测试、Extension Host 集成测试和竞品分析为准，`[x]` 表示已实现并至少经过现有验证，`[ ]` 表示尚未实现或尚未达到可发布标准。
 >
@@ -27,7 +27,7 @@
 ### 已完成
 
 - [x] 已向 TypeScript、TSX、JavaScript 和 JSX 文档注入 next-yak 的 CSS TextMate grammar。
-- [x] 已在静态 next-yak 模板中提供 CSS 属性、值、函数、at-rule 和自定义属性补全。
+- [x] 已接入 CSS Language Service 的 CSS 属性、值、函数、at-rule 和自定义属性候选；以 `@` 开头的候选按 tagged template 上下文过滤并映射到安全的宿主 range。
 - [x] 已通过 TypeScript AST 确认补全目标的 import binding 来自 `next-yak`。
 - [x] 已支持 `import { styled, css, globalStyle, keyframes } from 'next-yak'` 的直接具名导入。
 - [x] 已支持 `import { styled as s } from 'next-yak'` 形式的具名别名导入。
@@ -63,6 +63,12 @@
 
 
 ## P1：核心 CSS 语言体验
+
+### 标准 CSS 语法高亮与 at-rule 补全
+
+> 详细的 P1 边界、验收矩阵、上游经验和回归收录规则见 [CSS 边界测试策略](next-yak-vscode-css-boundary-test-strategy.md)。主清单只保留路线图入口，完成状态以该专项清单为准。
+
+- [x] 完成 keyframe 步骤高亮与以 `@` 开头的 at-rule 补全，并按专项测试策略验收。
 
 ### Hover
 
@@ -114,7 +120,7 @@
 - [ ] 为 `${Button}` 等 styled component selector 引用添加高亮、补全和诊断行为定义。
 - [ ] 为 `${atoms(...)}`、`${theme => ...}` 等 next-yak 常见插值保留 TypeScript 语言服务优先级并添加 fixture。
 - [ ] 为 `globalStyle` 中不支持的 runtime interpolation 提供针对 next-yak 约束的清晰诊断或文档提示。
-- [ ] 为 `keyframes` 中的 `from`、`to`、百分比步骤和 `animation` 值建立专门的补全与诊断测试。
+- [ ] 在 P1 的 keyframe selector 高亮与 at-rule 名称补全稳定后，为 `keyframes` 中的 `from`、`to`、百分比步骤和 `animation` 值建立专门的补全与诊断测试。
 - [ ] 为 `styled(Component)`、泛型组件和组件链式 `.attrs(...)` 添加真实 next-yak 项目 fixture。
 - [ ] 为上游 next-yak 新增或废弃 API 建立版本兼容矩阵并在升级时更新 fixture。
 
@@ -202,7 +208,7 @@
 
 ## 已确认的边界
 
-- [x] 当前扩展承诺 next-yak 的标准 CSS、现代 CSS nesting、媒体查询和 keyframes，而不承诺完整 Sass、SCSS 或 Less 语法。
+- [x] 当前扩展以 next-yak 的标准 CSS、现代 CSS nesting、媒体查询和 keyframes 为语法目标范围，而不承诺完整 Sass、SCSS 或 Less 语法；keyframe 步骤高亮和以 `@` 开头的 at-rule 补全已按专项策略验收。
 - [x] 当前扩展不会通过全局关闭 `typescriptreact` 或 `javascriptreact` 的 Emmet 来解决局部模板候选冲突。
 - [x] 当前扩展优先保持独立 VS Code 扩展架构，而不要求用户配置工作区 TypeScript 或 tsserver plugin。
 - [x] 当前扩展将补全的 import 来源判断与高亮的 TextMate 静态匹配视为两个不同可靠性层级。

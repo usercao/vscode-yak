@@ -25,6 +25,33 @@ export interface SelectorCompletionContext {
   text: string
 }
 
+export type AtRuleCompletionContext =
+  | {
+      allowsTopLevelRules: boolean
+      kind: 'name'
+      nested: boolean
+      sourceStart: number
+      text: string
+    }
+  | {
+      kind: 'blocked'
+    }
+  | {
+      kind: 'prelude'
+    }
+  | {
+      kind: 'rule'
+    }
+  | {
+      atRuleName: string
+      kind: 'descriptor'
+      sourceStart: number
+      text: string
+    }
+  | {
+      kind: 'descriptor-value'
+    }
+
 export interface NextYakTemplateDocument {
   fileName: string
   languageId: string
@@ -62,8 +89,29 @@ interface TaggedNextYakTemplate {
 }
 
 type NextYakBinding = NamedNextYakBinding | NamespaceNextYakBinding
+type CssBlockKind = 'descriptor' | 'group' | 'keyframes' | 'rule'
+
+interface CssBlock {
+  atRuleName?: string
+  kind: CssBlockKind
+}
 
 const nextYakTagNames = new Set<NextYakTag>(['styled', 'css', 'globalStyle', 'keyframes'])
+const descriptorAtRuleNames = new Set([
+  '@counter-style',
+  '@font-face',
+  '@font-feature-values',
+  '@font-palette-values',
+  '@page',
+  '@position-try',
+  '@property',
+])
+const keyframeAtRuleNames = new Set([
+  '@keyframes',
+  '@-moz-keyframes',
+  '@-o-keyframes',
+  '@-webkit-keyframes',
+])
 const regularExpressionPrefixKeywords = new Set([
   'case',
   'delete',
@@ -294,6 +342,160 @@ export function getSelectorCompletionContext(
   }
 
   return { sourceStart, text }
+}
+
+export function getAtRuleCompletionContext(
+  source: string,
+  cursorOffset: number,
+  template: NextYakTemplate,
+): AtRuleCompletionContext | undefined {
+  const cursorInBody = cursorOffset - template.bodyStart
+
+  if (cursorInBody < 0 || cursorInBody > template.maskedBody.length) {
+    return undefined
+  }
+
+  const lexicalState = getCssLexicalState(template.maskedBody, cursorInBody)
+
+  if (lexicalState.inComment || lexicalState.quote || lexicalState.parentheses.includes('url')) {
+    return undefined
+  }
+
+  const nameMatch = /^\s*(@[-a-zA-Z]*)$/.exec(lexicalState.statement)
+
+  if (nameMatch) {
+    if (
+      template.tag === 'keyframes'
+      || lexicalState.blocks.some((block) => block.kind === 'descriptor' || block.kind === 'keyframes')
+    ) {
+      return { kind: 'blocked' }
+    }
+
+    return {
+      allowsTopLevelRules: template.tag === 'globalStyle' && lexicalState.blocks.length === 0,
+      kind: 'name',
+      nested: lexicalState.blocks.length > 0,
+      sourceStart: template.bodyStart + cursorInBody - nameMatch[1].length,
+      text: nameMatch[1],
+    }
+  }
+
+  if (lexicalState.statement.trimStart().startsWith('@')) {
+    return { kind: 'prelude' }
+  }
+
+  const block = lexicalState.blocks.at(-1)
+
+  if (block?.kind === 'descriptor') {
+    if (template.tag !== 'globalStyle') {
+      return { kind: 'blocked' }
+    }
+
+    const descriptorMatch = /^\s*([-_a-zA-Z][-_a-zA-Z0-9]*)?$/.exec(lexicalState.statement)
+
+    if (!descriptorMatch || !block.atRuleName) {
+      return { kind: 'descriptor-value' }
+    }
+
+    const text = descriptorMatch[1] ?? ''
+    return {
+      atRuleName: block.atRuleName,
+      kind: 'descriptor',
+      sourceStart: template.bodyStart + cursorInBody - text.length,
+      text,
+    }
+  }
+
+  return block?.kind === 'group' ? { kind: 'rule' } : undefined
+}
+
+function getCssLexicalState(text: string, endOffset: number) {
+  const blocks: CssBlock[] = []
+  const parentheses: string[] = []
+  let inComment = false
+  let quote: '"' | "'" | undefined
+  let statement = ''
+
+  for (let offset = 0; offset < endOffset; offset += 1) {
+    const character = text[offset]
+    const nextCharacter = text[offset + 1]
+
+    if (inComment) {
+      if (character === '*' && nextCharacter === '/') {
+        inComment = false
+        offset += 1
+      }
+      continue
+    }
+
+    if (quote) {
+      if (character === '\\') {
+        offset += 1
+      } else if (character === quote) {
+        quote = undefined
+      }
+      continue
+    }
+
+    if (character === '/' && nextCharacter === '*') {
+      inComment = true
+      offset += 1
+      continue
+    }
+
+    if (character === '"' || character === "'") {
+      quote = character
+      continue
+    }
+
+    if (character === '(') {
+      const functionName = /([-_a-zA-Z][-_a-zA-Z0-9]*)\s*$/.exec(statement)?.[1]?.toLowerCase() ?? ''
+      parentheses.push(functionName)
+      statement += character
+      continue
+    }
+
+    if (character === ')') {
+      parentheses.pop()
+      statement += character
+      continue
+    }
+
+    if (character === '{') {
+      blocks.push(getCssBlockKind(statement))
+      statement = ''
+      continue
+    }
+
+    if (character === '}') {
+      blocks.pop()
+      statement = ''
+      continue
+    }
+
+    if (character === ';') {
+      statement = ''
+      continue
+    }
+
+    statement += character
+  }
+
+  return { blocks, inComment, parentheses, quote, statement }
+}
+
+function getCssBlockKind(statement: string): CssBlock {
+  const atRuleName = /^\s*(@[-_a-zA-Z][-_a-zA-Z0-9]*)/.exec(statement)?.[1]?.toLowerCase()
+
+  if (!atRuleName) {
+    return { kind: 'rule' }
+  }
+
+  if (descriptorAtRuleNames.has(atRuleName)) {
+    return { atRuleName, kind: 'descriptor' }
+  }
+
+  return { atRuleName, kind: keyframeAtRuleNames.has(atRuleName) ? 'keyframes' : 'group' }
 }
 
 function createTemplate(
