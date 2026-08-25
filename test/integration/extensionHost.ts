@@ -531,6 +531,7 @@ export async function run(): Promise<void> {
     assert.equal(replacementRange.start.line, 3)
     assert.equal(replacementRange.end.line, 3)
     assert.equal(completionInsertText(replacement.item), 'color: $0;')
+    assert.equal(replacement.item.command?.command, 'editor.action.triggerSuggest')
 
     const insertion = await assertPropertyCompletion({ source: styledSource('') })
     const insertionRange = completionRange(insertion.item)

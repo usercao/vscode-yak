@@ -896,6 +896,7 @@ function toCompletionItem(
   completion.documentation = toDocumentation(item.documentation)
   completion.filterText ??= item.filterText
   completion.preselect = item.preselect
+  completion.command = item.command
   completion.sortText = `!${item.sortText ?? item.label}`
 
   if (item.tags?.includes(1)) {
