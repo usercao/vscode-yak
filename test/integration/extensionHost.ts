@@ -58,12 +58,30 @@ interface DirectCodeActionProviderConstructor {
   new (): DirectCodeActionProvider
 }
 
+interface DirectColorProvider {
+  provideColorPresentations(
+    color: vscode.Color,
+    context: { document: vscode.TextDocument; range: vscode.Range },
+    token: vscode.CancellationToken,
+  ): vscode.ColorPresentation[] | undefined
+  provideDocumentColors(
+    document: vscode.TextDocument,
+    token: vscode.CancellationToken,
+  ): vscode.ColorInformation[] | undefined
+}
+
+interface DirectColorProviderConstructor {
+  new (): DirectColorProvider
+}
+
 interface ExtensionModule {
   NextYakCssCodeActionProvider?: DirectCodeActionProviderConstructor
+  NextYakCssColorProvider?: DirectColorProviderConstructor
   NextYakCssCompletionProvider?: DirectCompletionProviderConstructor
   NextYakCssHoverProvider?: DirectHoverProviderConstructor
   default?: {
     NextYakCssCodeActionProvider?: DirectCodeActionProviderConstructor
+    NextYakCssColorProvider?: DirectColorProviderConstructor
     NextYakCssCompletionProvider?: DirectCompletionProviderConstructor
     NextYakCssHoverProvider?: DirectHoverProviderConstructor
   }
@@ -268,6 +286,14 @@ async function createDirectCodeActionProvider(extensionPath: string): Promise<Di
   return new Provider()
 }
 
+async function createDirectColorProvider(extensionPath: string): Promise<DirectColorProvider> {
+  const extensionModule = await import(pathToFileURL(join(extensionPath, 'dist', 'extension.cjs')).href) as ExtensionModule
+  const Provider = extensionModule.NextYakCssColorProvider ?? extensionModule.default?.NextYakCssColorProvider
+
+  assert.ok(Provider, 'Expected the extension bundle to export NextYakCssColorProvider')
+  return new Provider()
+}
+
 function cancellationToken(cancelOnCheck: number): vscode.CancellationToken {
   let checks = 0
 
@@ -351,6 +377,29 @@ async function registeredCodeActionsAt(
     document.uri,
     range,
     vscode.CodeActionKind.QuickFix.value,
+  )
+}
+
+async function registeredDocumentColors(document: vscode.TextDocument): Promise<readonly vscode.ColorInformation[]> {
+  await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true })
+
+  return vscode.commands.executeCommand<vscode.ColorInformation[]>(
+    'vscode.executeDocumentColorProvider',
+    document.uri,
+  )
+}
+
+async function registeredColorPresentations(
+  document: vscode.TextDocument,
+  color: vscode.Color,
+  range: vscode.Range,
+): Promise<readonly vscode.ColorPresentation[]> {
+  await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true })
+
+  return vscode.commands.executeCommand<vscode.ColorPresentation[]>(
+    'vscode.executeColorPresentationProvider',
+    color,
+    { uri: document.uri, range },
   )
 }
 
@@ -939,6 +988,96 @@ export async function run(): Promise<void> {
       [],
       'Expected the next-yak CSS provider to return no quick fix when CSS Language Service does not offer one',
     )
+  })
+
+  await runCase('provides safe mapped CSS colors and picker presentations', async () => {
+    const source = [
+      "import { styled } from 'next-yak'",
+      'const Panel = styled.div`',
+      '  color: #663399;',
+      '  outline-color: rgba(23, 107, 91, 0.5);',
+      '  border-color: rebeccapurple;',
+      '  background: linear-gradient(#fff, hsl(160 45% 26%));',
+      '  /* #ff0000 */',
+      '  content: "#00ff00";',
+      '  color: ${theme.accent};',
+      '`',
+    ].join('\n')
+    const document = await vscode.workspace.openTextDocument({ language: 'typescriptreact', content: source })
+    const provider = await createDirectColorProvider(extension.extensionPath)
+    const directColors = provider.provideDocumentColors(document, neverCancelledToken)
+
+    assert.ok(directColors, 'Expected the direct provider to find static CSS colors')
+    assert.deepEqual(directColors.map((color) => document.getText(color.range)), [
+      '#663399',
+      'rgba(23, 107, 91, 0.5)',
+      'rebeccapurple',
+      '#fff',
+      'hsl(160 45% 26%)',
+    ])
+    const alphaColor = directColors.find((color) => document.getText(color.range) === 'rgba(23, 107, 91, 0.5)')
+    const hexColor = directColors.find((color) => document.getText(color.range) === '#663399')
+
+    assert.ok(alphaColor, 'Expected an alpha color decoration')
+    assert.equal(alphaColor.color.alpha, 0.5)
+    assert.ok(hexColor, 'Expected a static hex color decoration')
+
+    const directPresentations = provider.provideColorPresentations(
+      hexColor.color,
+      { document, range: hexColor.range },
+      neverCancelledToken,
+    )
+
+    assert.ok(directPresentations, 'Expected color picker presentations for the static hex color')
+    assert.ok(directPresentations.some((presentation) => presentation.label === 'rgb(102, 51, 153)'))
+    assert.ok(directPresentations.some((presentation) => presentation.label === 'hsl(270, 50%, 40%)'))
+    const namedPresentation = directPresentations.find((presentation) => presentation.label === 'rebeccapurple')
+
+    assert.ok(namedPresentation?.textEdit, 'Expected an exact named-color presentation')
+    assert.equal(document.getText(namedPresentation.textEdit.range), '#663399')
+    assert.equal(namedPresentation.textEdit.newText, 'rebeccapurple')
+
+    const alphaPresentations = provider.provideColorPresentations(
+      alphaColor.color,
+      { document, range: alphaColor.range },
+      neverCancelledToken,
+    )
+
+    assert.ok(alphaPresentations, 'Expected color picker presentations for the alpha color')
+    const rgbaPresentation = alphaPresentations.find((presentation) => presentation.label === 'rgba(23, 107, 91, 0.5)')
+    const hslaPresentation = alphaPresentations.find((presentation) => presentation.label === 'hsla(169, 65%, 25%, 0.5)')
+
+    assert.ok(rgbaPresentation?.textEdit, 'Expected an rgba picker presentation for the alpha color')
+    assert.ok(hslaPresentation?.textEdit, 'Expected an hsla picker presentation for the alpha color')
+    assert.equal(document.getText(rgbaPresentation.textEdit.range), 'rgba(23, 107, 91, 0.5)')
+    assert.equal(document.getText(hslaPresentation.textEdit.range), 'rgba(23, 107, 91, 0.5)')
+    assert.ok(!alphaPresentations.some((presentation) => presentation.label === 'rebeccapurple'))
+
+    const commentStart = source.indexOf('#ff0000')
+    const commentRange = new vscode.Range(
+      document.positionAt(commentStart),
+      document.positionAt(commentStart + '#ff0000'.length),
+    )
+
+    assert.deepEqual(
+      provider.provideColorPresentations(new vscode.Color(1, 0, 0, 1), { document, range: commentRange }, neverCancelledToken),
+      [],
+      'Expected no color picker presentation for a comment pseudo-color',
+    )
+
+    const registeredColors = await registeredDocumentColors(document)
+    const registeredHexColor = registeredColors.find((color) => document.getText(color.range) === '#663399')
+
+    assert.ok(registeredHexColor, 'Expected the activated extension to register a DocumentColorProvider')
+    const registeredPresentations = await registeredColorPresentations(
+      document,
+      registeredHexColor.color,
+      registeredHexColor.range,
+    )
+    const registeredNamedPresentation = registeredPresentations.find((presentation) => presentation.label === 'rebeccapurple')
+
+    assert.ok(registeredNamedPresentation?.textEdit, 'Expected the registered picker to offer rebeccapurple')
+    assert.equal(document.getText(registeredNamedPresentation.textEdit.range), '#663399')
   })
 
   await runCase('keeps completion ranges safe for incomplete templates and syntax errors', async () => {

@@ -544,6 +544,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/color-name@npm:^2.0.0":
+  version: 2.0.0
+  resolution: "@types/color-name@npm:2.0.0"
+  checksum: 10c0/f8c80199a1e1c38fb8e3bf26743e9fe1220e3991d6df42b7abdc36b3aa94abb90b038ce615d684d7e46b4423a79e6b272dd4fd690859d6f000663a646ea74bbf
+  languageName: node
+  linkType: hard
+
 "@types/deep-eql@npm:*":
   version: 4.0.2
   resolution: "@types/deep-eql@npm:4.0.2"
@@ -1361,6 +1368,13 @@ __metadata:
   dependencies:
     color-name: "npm:~1.1.4"
   checksum: 10c0/37e1150172f2e311fe1b2df62c6293a342ee7380da7b9cfdba67ea539909afbd74da27033208d01d6d5cfc65ee7868a22e18d7e7648e004425441c0f8a15a7d7
+  languageName: node
+  linkType: hard
+
+"color-name@npm:^2.1.1":
+  version: 2.1.1
+  resolution: "color-name@npm:2.1.1"
+  checksum: 10c0/6a1096d761b84ad18bdf1464d449800dbb1e613c914aafd9551514884f5e0cc47b5478fea32048188ec7a28424c6ded55fd4a81f39ca351e2ca4dd7729e05128
   languageName: node
   linkType: hard
 
@@ -2720,10 +2734,12 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "next-yak-vscode@workspace:."
   dependencies:
+    "@types/color-name": "npm:^2.0.0"
     "@types/node": "npm:^24"
     "@types/vscode": "npm:^1.134.0"
     "@vscode/test-electron": "npm:^3.1.0"
     "@vscode/vsce": "npm:3.9.2"
+    color-name: "npm:^2.1.1"
     tsdown: "npm:^0.22.14"
     typescript: "npm:~6.0.2"
     vitest: "npm:^4.1.11"

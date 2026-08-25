@@ -41,7 +41,7 @@ flowchart LR
   parser --> virtual[虚拟 CSS 文档]
   virtual --> cssls[vscode-css-languageservice]
   cssls --> mapper[位置与编辑映射]
-  mapper --> editor[补全、Hover、诊断]
+  mapper --> editor[补全、Hover、诊断、颜色]
 ```
 
 TextMate grammar 负责让模板视觉上按 CSS 着色；扩展宿主内的 TypeScript AST 解析和虚拟 CSS 文档负责语言智能功能。二者共享模板标签的约定，但不必共用同一套解析实现。
@@ -190,6 +190,12 @@ next-yak 特有语义不应由扩展内嵌 ESLint rule 实现。官方 `eslint-p
 
 若未来产品目标要求没有 ESLint 配置时也显示 next-yak 语义诊断，应先与上游协作导出稳定的分析 API，再评估独立集成；在此之前，扩展不以 ESLint 作为运行时依赖。
 
+## 颜色装饰与 picker
+
+扩展通过 `vscode.languages.registerColorProvider` 为已识别的 next-yak 模板注册颜色能力。每个请求复用模板缓存和虚拟 CSS 文档：`findDocumentColors` 返回的颜色范围必须完整映射到宿主模板的静态正文，随后才转换为 VS Code `ColorInformation`。因此 hex、`rgb`、`rgba`、`hsl`、命名颜色以及渐变中的静态颜色 stop 都能显示编辑器颜色装饰。
+
+picker 表示转换首先确认请求 range 与 provider 已发现的静态颜色 range 完全一致，再调用 CSS Language Service 的 `getColorPresentations`。其 text edit 和 additional text edit 必须全部安全映射、互不重叠，且不触及插值、虚拟包装、注释或带引号的 CSS 字符串；否则整项表示拒绝。除 CSS Language Service 原生提供的 hex、`rgb`、`rgba`、`hsl` 等表示外，扩展使用直接声明并打包的 `color-name` 数据为 alpha 为 `1`、每个通道精确对应 8-bit RGB 的颜色追加标准 CSS 名称。近似颜色和半透明颜色不提供命名色转换。
+
 ## 扩展清单结构
 
 建议的初始结构如下：
@@ -253,7 +259,7 @@ next-yak-vscode/
 
 ### 第三阶段：语言体验
 
-- CSS hover 与颜色装饰。
+- CSS hover、颜色装饰与颜色 picker 表示转换。
 - CSS 语法诊断，并将诊断映射回宿主文档。
 - 工作区自定义属性索引和补全。
 - 面向变量、mixins 或 next-yak 特有约束的代码操作。

@@ -10,6 +10,7 @@ CSS syntax highlighting and IntelliSense for `next-yak` tagged templates in VS C
 - Shows CSS hover documentation for static properties, documented values/functions, pseudo-classes, and pseudo-elements, including MDN references when CSS data provides them.
 - Reports safely mapped CSS syntax and lint diagnostics for static template content, including unknown properties and incomplete values.
 - Offers CSS Language Service quick fixes for supported static diagnostics, such as unknown-property spelling corrections.
+- Shows color decorations and picker conversions for static CSS colors, including hex, `rgb`/`rgba`, `hsl`, named colors, and gradient stops.
 - Leaves `${...}` interpolations to the built-in JavaScript or TypeScript language service.
 - Resolves direct, aliased, and namespace `next-yak` imports before providing completion.
 - Supports TypeScript, TSX, JavaScript, and JSX files.
@@ -95,6 +96,12 @@ Hover uses the same static template recognition and virtual CSS mapping as compl
 CSS diagnostics run for the static portions of recognized next-yak templates. Their ranges are mapped back to the host document; diagnostics that touch `${...}` placeholders or synthetic virtual wrappers are discarded. The default `nextYak.css.validate` setting controls this behavior per resource without changing completion or hover.
 
 Quick fixes are deliberately narrower. The extension currently exposes only CSS Language Service actions whose edits are wholly within one static source line of the current template. It rejects edits that touch interpolations or virtual wrappers, span multiple lines, change another document, overlap, or require a command. At present, this chiefly provides spelling suggestions for unknown CSS properties.
+
+## CSS Colors
+
+Color decorations and the VS Code color picker run only in the static CSS portions of recognized next-yak templates. Color ranges and picker edits are mapped from the virtual CSS document back to the host TypeScript, TSX, JavaScript, or JSX document. Hex, `rgb`, `rgba`, `hsl`, and named colors can be converted through the picker; an opaque exact RGB match also offers its standard CSS color name, such as `#663399` to `rebeccapurple`.
+
+The provider rejects colors and edits that touch `${...}` interpolations, synthetic virtual wrappers, CSS comments, or quoted CSS strings. This keeps decoration and picker edits confined to source CSS that the extension can safely map.
 
 ## next-yak Semantic Lint
 

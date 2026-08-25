@@ -5,6 +5,7 @@ import {
   type CompletionItem as CssCompletionItem,
   type CodeAction as CssCodeAction,
   type CodeActionContext as CssCodeActionContext,
+  type Color as CssColor,
   type Diagnostic as CssDiagnostic,
   type Hover as CssHover,
   type IAtDirectiveData,
@@ -23,6 +24,11 @@ import {
   type NextYakCssDiagnostic,
 } from './nextYakDiagnostics'
 import { mapVirtualCssCodeAction } from './nextYakCodeActions'
+import {
+  getNextYakCssColorPresentations,
+  getNextYakCssColors,
+  type NextYakCssColorPresentation,
+} from './nextYakColors'
 import {
   createVirtualCssText,
   getAtRuleCompletionContext,
@@ -87,6 +93,7 @@ export function activate(context: vscode.ExtensionContext) {
   const diagnostics = vscode.languages.createDiagnosticCollection('next-yak CSS')
   const diagnosticProvider = new NextYakCssDiagnosticProvider(templateCache, diagnostics)
   const codeActionProvider = new NextYakCssCodeActionProvider(templateCache)
+  const colorProvider = new NextYakCssColorProvider(templateCache)
 
   const updateDiagnostics = (document: vscode.TextDocument) => {
     diagnosticProvider.updateDocument(document)
@@ -127,6 +134,7 @@ export function activate(context: vscode.ExtensionContext) {
       codeActionProvider,
       { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] },
     ),
+    vscode.languages.registerColorProvider(nextYakDocumentSelector, colorProvider),
   )
 
   refreshDiagnostics()
@@ -362,8 +370,133 @@ export class NextYakCssCodeActionProvider implements vscode.CodeActionProvider {
   }
 }
 
+export class NextYakCssColorProvider implements vscode.DocumentColorProvider {
+  constructor(private readonly templateCache = new NextYakTemplateCache()) {}
+
+  provideDocumentColors(
+    document: vscode.TextDocument,
+    token: vscode.CancellationToken,
+  ): vscode.ColorInformation[] | undefined {
+    if (token.isCancellationRequested || !isNextYakDocument(document)) {
+      return undefined
+    }
+
+    const colors: vscode.ColorInformation[] = []
+
+    for (const template of getNextYakTemplates(document, this.templateCache)) {
+      const virtualCss = createVirtualCssDocument(document, template)
+
+      for (const color of getNextYakCssColors(cssLanguageService, template, virtualCss)) {
+        if (token.isCancellationRequested) {
+          return undefined
+        }
+
+        colors.push(new vscode.ColorInformation(
+          toDocumentRangeFromOffsets(document, color.range),
+          toVscodeColor(color.color),
+        ))
+      }
+    }
+
+    return token.isCancellationRequested ? undefined : colors
+  }
+
+  provideColorPresentations(
+    color: vscode.Color,
+    context: { document: vscode.TextDocument; range: vscode.Range },
+    token: vscode.CancellationToken,
+  ): vscode.ColorPresentation[] | undefined {
+    if (token.isCancellationRequested || !isNextYakDocument(context.document)) {
+      return undefined
+    }
+
+    const sourceRange = toOffsetRange(context.document, context.range)
+
+    for (const template of getNextYakTemplates(context.document, this.templateCache)) {
+      if (!isRangeInsideTemplate(context.range, context.document, template)) {
+        continue
+      }
+
+      const virtualCss = createVirtualCssDocument(context.document, template)
+      const isKnownColorRange = getNextYakCssColors(cssLanguageService, template, virtualCss)
+        .some((knownColor) => isSameOffsetRange(knownColor.range, sourceRange))
+
+      if (!isKnownColorRange) {
+        continue
+      }
+
+      const presentations = getNextYakCssColorPresentations(
+        cssLanguageService,
+        toCssColor(color),
+        sourceRange,
+        template,
+        virtualCss,
+      ).map((presentation) => toVscodeColorPresentation(context.document, presentation))
+
+      return token.isCancellationRequested ? undefined : presentations
+    }
+
+    return []
+  }
+}
+
 function isNextYakDocument(document: vscode.TextDocument) {
   return nextYakLanguageIds.has(document.languageId)
+}
+
+function getNextYakTemplates(document: vscode.TextDocument, templateCache: NextYakTemplateCache) {
+  return templateCache.findTemplates({
+    fileName: document.fileName,
+    languageId: document.languageId,
+    source: document.getText(),
+    uri: document.uri.toString(),
+    version: document.version,
+  })
+}
+
+function toDocumentRangeFromOffsets(document: vscode.TextDocument, range: { end: number; start: number }) {
+  return new vscode.Range(document.positionAt(range.start), document.positionAt(range.end))
+}
+
+function toOffsetRange(document: vscode.TextDocument, range: vscode.Range) {
+  return {
+    end: document.offsetAt(range.end),
+    start: document.offsetAt(range.start),
+  }
+}
+
+function isSameOffsetRange(left: { end: number; start: number }, right: { end: number; start: number }) {
+  return left.start === right.start && left.end === right.end
+}
+
+function toVscodeColor(color: CssColor) {
+  return new vscode.Color(color.red, color.green, color.blue, color.alpha)
+}
+
+function toCssColor(color: vscode.Color): CssColor {
+  return {
+    alpha: color.alpha,
+    blue: color.blue,
+    green: color.green,
+    red: color.red,
+  }
+}
+
+function toVscodeColorPresentation(
+  document: vscode.TextDocument,
+  presentation: NextYakCssColorPresentation,
+) {
+  const colorPresentation = new vscode.ColorPresentation(presentation.label)
+
+  colorPresentation.textEdit = vscode.TextEdit.replace(
+    toDocumentRangeFromOffsets(document, presentation.textEdit.range),
+    presentation.textEdit.newText,
+  )
+  colorPresentation.additionalTextEdits = presentation.additionalTextEdits?.map((textEdit) => (
+    vscode.TextEdit.replace(toDocumentRangeFromOffsets(document, textEdit.range), textEdit.newText)
+  ))
+
+  return colorPresentation
 }
 
 function isCssValidationEnabled(resource: vscode.Uri) {
