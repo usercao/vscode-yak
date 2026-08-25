@@ -2,9 +2,24 @@ import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import * as vscode from 'vscode'
+import {
+  getCSSLanguageService,
+  newCSSDataProvider,
+  type CSSDataV1,
+  type CompletionList as CssCompletionList,
+  type LanguageService as CssLanguageService,
+} from 'vscode-css-languageservice'
 
 const cursorMarker = '/*cursor*/'
 const nextYakSortPrefix = '!'
+const completionLatencyBudgetMilliseconds = {
+  continuousInput: 4_000,
+  largeDocument: 5_000,
+  manualTrigger: 2_000,
+  singleCharacter: 1_500,
+} as const
+const largeDocumentTemplateCount = 250
+type CssCompletionService = Pick<CssLanguageService, 'doComplete' | 'parseStylesheet'>
 
 interface CompletionOptions {
   language?: string
@@ -30,7 +45,7 @@ interface DirectCompletionProvider {
 }
 
 interface DirectCompletionProviderConstructor {
-  new (): DirectCompletionProvider
+  new (templateCache?: undefined, cssCompletionService?: CssCompletionService): DirectCompletionProvider
 }
 
 interface DirectHoverProvider {
@@ -262,12 +277,15 @@ async function runCase(name: string, callback: () => Promise<void>): Promise<voi
   }
 }
 
-async function createDirectProvider(extensionPath: string): Promise<DirectCompletionProvider> {
+async function createDirectProvider(
+  extensionPath: string,
+  cssCompletionService?: CssCompletionService,
+): Promise<DirectCompletionProvider> {
   const extensionModule = await import(pathToFileURL(join(extensionPath, 'dist', 'extension.cjs')).href) as ExtensionModule
   const Provider = extensionModule.NextYakCssCompletionProvider ?? extensionModule.default?.NextYakCssCompletionProvider
 
   assert.ok(Provider, 'Expected the extension bundle to export NextYakCssCompletionProvider')
-  return new Provider()
+  return new Provider(undefined, cssCompletionService)
 }
 
 async function createDirectHoverProvider(extensionPath: string): Promise<DirectHoverProvider> {
@@ -1162,6 +1180,107 @@ export async function run(): Promise<void> {
     }
   })
 
+  await runCase('keeps completion requests independent across multiple cursors', async () => {
+    const source = [
+      "import { styled } from 'next-yak'",
+      'const Panel = styled.div`',
+      '  col',
+      '  dis',
+      '`',
+    ].join('\n')
+    const document = await vscode.workspace.openTextDocument({ language: 'typescriptreact', content: source })
+    const editor = await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true })
+    const colorOffset = source.indexOf('col') + 'col'.length
+    const displayOffset = source.indexOf('dis') + 'dis'.length
+    const provider = await createDirectProvider(extension.extensionPath)
+
+    editor.selections = [
+      new vscode.Selection(document.positionAt(colorOffset), document.positionAt(colorOffset)),
+      new vscode.Selection(document.positionAt(displayOffset), document.positionAt(displayOffset)),
+    ]
+
+    const colorItems = provider.provideCompletionItems(
+      document,
+      document.positionAt(colorOffset),
+      neverCancelledToken,
+    )?.items ?? []
+    const displayItems = provider.provideCompletionItems(
+      document,
+      document.positionAt(displayOffset),
+      neverCancelledToken,
+    )?.items ?? []
+    const color = findNextYakItem(colorItems, 'color')
+    const display = findNextYakItem(displayItems, 'display')
+
+    assert.ok(color, 'Expected color completion at the first cursor')
+    assert.ok(display, 'Expected display completion at the second cursor')
+    assert.equal(document.getText(completionRange(color)), 'col')
+    assert.equal(document.getText(completionRange(display)), 'dis')
+  })
+
+  await runCase('keeps completion current through rapid edits, undo, and redo', async () => {
+    const source = styledSource('col')
+    const initialOffset = source.indexOf(cursorMarker)
+    const document = await vscode.workspace.openTextDocument({
+      language: 'typescriptreact',
+      content: source.replace(cursorMarker, ''),
+    })
+    const editor = await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true })
+    const provider = await createDirectProvider(extension.extensionPath)
+    const propertyStart = document.getText().indexOf('col')
+    let prefix = 'col'
+
+    for (const nextPrefix of ['c', 'co', 'col', 'colo', 'col']) {
+      await editor.edit((edit) => edit.replace(
+        new vscode.Range(
+          document.positionAt(propertyStart),
+          document.positionAt(propertyStart + prefix.length),
+        ),
+        nextPrefix,
+      ))
+      prefix = nextPrefix
+      const items = provider.provideCompletionItems(
+        document,
+        document.positionAt(propertyStart + prefix.length),
+        neverCancelledToken,
+      )?.items ?? []
+      const color = findNextYakItem(items, 'color')
+
+      assert.ok(color, `Expected color completion after rapidly editing to ${prefix}`)
+      assert.equal(document.getText(completionRange(color)), prefix)
+    }
+
+    await editor.edit((edit) => edit.replace(
+      new vscode.Range(document.positionAt(propertyStart), document.positionAt(propertyStart + prefix.length)),
+      'display: g',
+    ))
+    const displayValueOffset = propertyStart + 'display: g'.length
+    let items = provider.provideCompletionItems(
+      document,
+      document.positionAt(displayValueOffset),
+      neverCancelledToken,
+    )?.items ?? []
+
+    assert.ok(findNextYakItem(items, 'grid'), 'Expected grid completion after editing the declaration value')
+    await vscode.commands.executeCommand('undo')
+    assert.equal(document.getText().indexOf('col'), propertyStart, 'Expected undo to restore the property prefix')
+    items = provider.provideCompletionItems(
+      document,
+      document.positionAt(initialOffset),
+      neverCancelledToken,
+    )?.items ?? []
+    assert.ok(findNextYakItem(items, 'color'), 'Expected color completion after undo')
+
+    await vscode.commands.executeCommand('redo')
+    assert.ok(document.getText().includes('display: g'), 'Expected redo to restore the declaration value')
+    items = provider.provideCompletionItems(
+      document,
+      document.positionAt(displayValueOffset),
+      neverCancelledToken,
+    )?.items ?? []
+    assert.ok(findNextYakItem(items, 'grid'), 'Expected grid completion after redo')
+  })
+
   await runCase('stops cancelled completion work before and after CSS computation', async () => {
     const provider = await createDirectProvider(extension.extensionPath)
     const request = await directProviderRequest(styledSource())
@@ -1182,31 +1301,160 @@ export async function run(): Promise<void> {
       undefined,
       'Expected an at-rule request cancelled after CSS computation to discard stale items',
     )
+
+    const cancellationSource = new vscode.CancellationTokenSource()
+    const cancelsDuringCssCompletion: CssCompletionService = {
+      doComplete: () => ({ isIncomplete: false, items: [] }),
+      parseStylesheet: () => {
+        cancellationSource.cancel()
+        return {}
+      },
+    }
+    const cancellableProvider = await createDirectProvider(extension.extensionPath, cancelsDuringCssCompletion)
+
+    try {
+      assert.equal(
+        cancellableProvider.provideCompletionItems(request.document, request.position, cancellationSource.token),
+        undefined,
+        'Expected a real cancellation token to discard completion after CSS work begins',
+      )
+    } finally {
+      cancellationSource.dispose()
+    }
   })
 
-  await runCase('keeps a large document responsive during continuous completion requests', async () => {
+  await runCase('degrades safely when CSS completion responses are malformed', async () => {
+    const malformedService: CssCompletionService = {
+      doComplete: () => ({
+        items: [
+          undefined,
+          { label: 42 },
+          { label: 'unsafe', textEdit: { newText: 'unsafe', range: null } },
+          { label: 'safe' },
+        ],
+      } as unknown as CssCompletionList),
+      parseStylesheet: () => ({}),
+    }
+    const provider = await createDirectProvider(extension.extensionPath, malformedService)
+    const request = await directProviderRequest(styledSource())
+    const items = provider.provideCompletionItems(
+      request.document,
+      request.position,
+      neverCancelledToken,
+    )?.items ?? []
+
+    assert.deepEqual(nextYakItems(items).map(completionLabel), ['safe'])
+  })
+
+  await runCase('degrades safely when corrupt CSS custom data throws during completion', async () => {
+    const corruptCustomData = {
+      properties: [{ name: '--broken', values: [{ name: null }] }],
+      version: 1.1,
+    } as unknown as CSSDataV1
+    const corruptDataService = getCSSLanguageService({
+      customDataProviders: [newCSSDataProvider(corruptCustomData)],
+    })
+    const provider = await createDirectProvider(extension.extensionPath, corruptDataService)
+    const request = await directProviderRequest(styledSource('--broken: '))
+    const items = provider.provideCompletionItems(
+      request.document,
+      request.position,
+      neverCancelledToken,
+    )?.items ?? []
+
+    assert.deepEqual(nextYakItems(items), [])
+  })
+
+  await runCase('keeps completion latency within the defined budgets', async () => {
     const provider = await createDirectProvider(extension.extensionPath)
-    const templateCount = 80
-    const source = [
+    const singleCharacterRequest = await directProviderRequest(styledSource('c'))
+    let startedAt = performance.now()
+    let result = provider.provideCompletionItems(
+      singleCharacterRequest.document,
+      singleCharacterRequest.position,
+      neverCancelledToken,
+    )
+    let elapsedMilliseconds = performance.now() - startedAt
+
+    assert.ok(result?.items.some((item) => completionLabel(item) === 'color'), 'Expected color for a single-character request')
+    assert.ok(
+      elapsedMilliseconds < completionLatencyBudgetMilliseconds.singleCharacter,
+      `Expected single-character completion under ${completionLatencyBudgetMilliseconds.singleCharacter}ms; took ${elapsedMilliseconds.toFixed(1)}ms`,
+    )
+
+    const manualSource = styledSource('col')
+    const manualCursorOffset = manualSource.indexOf(cursorMarker)
+    const manualDocument = await vscode.workspace.openTextDocument({
+      language: 'typescriptreact',
+      content: manualSource.replace(cursorMarker, ''),
+    })
+    await vscode.window.showTextDocument(manualDocument, { preview: false, preserveFocus: true })
+    startedAt = performance.now()
+    const manualList = await vscode.commands.executeCommand<vscode.CompletionList | undefined>(
+      'vscode.executeCompletionItemProvider',
+      manualDocument.uri,
+      manualDocument.positionAt(manualCursorOffset),
+    )
+    elapsedMilliseconds = performance.now() - startedAt
+
+    assert.ok(findNextYakItem(manualList?.items ?? [], 'color'), 'Expected color from manual completion')
+    assert.ok(
+      elapsedMilliseconds < completionLatencyBudgetMilliseconds.manualTrigger,
+      `Expected manual completion under ${completionLatencyBudgetMilliseconds.manualTrigger}ms; took ${elapsedMilliseconds.toFixed(1)}ms`,
+    )
+
+    const continuousSource = styledSource('c')
+    const continuousDocument = await vscode.workspace.openTextDocument({
+      language: 'typescriptreact',
+      content: continuousSource.replace(cursorMarker, ''),
+    })
+    const continuousEditor = await vscode.window.showTextDocument(continuousDocument, { preview: false, preserveFocus: true })
+    const continuousPrefixStart = continuousDocument.getText().lastIndexOf('  c') + 2
+    let continuousPrefix = 'c'
+
+    startedAt = performance.now()
+    for (const nextPrefix of ['c', 'co', 'col', 'colo', 'color']) {
+      if (nextPrefix !== continuousPrefix) {
+        await continuousEditor.edit((edit) => edit.replace(
+          new vscode.Range(
+            continuousDocument.positionAt(continuousPrefixStart),
+            continuousDocument.positionAt(continuousPrefixStart + continuousPrefix.length),
+          ),
+          nextPrefix,
+        ))
+        continuousPrefix = nextPrefix
+      }
+
+      result = provider.provideCompletionItems(
+        continuousDocument,
+        continuousDocument.positionAt(continuousPrefixStart + continuousPrefix.length),
+        neverCancelledToken,
+      )
+      assert.ok(result?.items.some((item) => completionLabel(item) === 'color'), `Expected color during continuous input at ${continuousPrefix}`)
+    }
+    elapsedMilliseconds = performance.now() - startedAt
+
+    assert.ok(
+      elapsedMilliseconds < completionLatencyBudgetMilliseconds.continuousInput,
+      `Expected continuous completion under ${completionLatencyBudgetMilliseconds.continuousInput}ms; took ${elapsedMilliseconds.toFixed(1)}ms`,
+    )
+
+    const largeSource = [
       "import { styled } from 'next-yak'",
-      ...Array.from({ length: templateCount }, (_, index) => `const Panel${index} = styled.div\`color: red;\``),
+      ...Array.from({ length: largeDocumentTemplateCount }, (_, index) => `const Panel${index} = styled.div\`color: red;\``),
       'const Current = styled.div`',
       `  col${cursorMarker}`,
       '`',
     ].join('\n')
-    const startedAt = performance.now()
+    const largeRequest = await directProviderRequest(largeSource)
+    startedAt = performance.now()
+    result = provider.provideCompletionItems(largeRequest.document, largeRequest.position, neverCancelledToken)
+    elapsedMilliseconds = performance.now() - startedAt
 
-    for (const prefix of ['c', 'co', 'col', 'colo', 'color']) {
-      const request = await directProviderRequest(source.replace('col/*cursor*/', `${prefix}/*cursor*/`))
-      const result = provider.provideCompletionItems(request.document, request.position, neverCancelledToken)
-
-      assert.ok(result?.items.some((item) => completionLabel(item) === 'color'), `Expected color during continuous input at ${prefix}`)
-    }
-
-    const elapsedMilliseconds = performance.now() - startedAt
+    assert.ok(result?.items.some((item) => completionLabel(item) === 'color'), 'Expected color in a large document')
     assert.ok(
-      elapsedMilliseconds < 5_000,
-      `Expected five completion requests across ${templateCount} templates to finish under 5000ms; took ${elapsedMilliseconds.toFixed(1)}ms`,
+      elapsedMilliseconds < completionLatencyBudgetMilliseconds.largeDocument,
+      `Expected completion across ${largeDocumentTemplateCount} templates under ${completionLatencyBudgetMilliseconds.largeDocument}ms; took ${elapsedMilliseconds.toFixed(1)}ms`,
     )
   })
 }

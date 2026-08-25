@@ -3,6 +3,7 @@ import {
   getDefaultCSSDataProvider,
   getCSSLanguageService,
   type CompletionItem as CssCompletionItem,
+  type LanguageService as CssLanguageService,
   type CodeAction as CssCodeAction,
   type CodeActionContext as CssCodeActionContext,
   type Color as CssColor,
@@ -87,6 +88,7 @@ const nextYakLanguageIds = new Set(['javascript', 'javascriptreact', 'typescript
 const cssCompletionTriggerCharacters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ:-@'.split('')
 const nextYakCssDiagnosticSource = 'next-yak CSS'
 const nextYakCssValidateConfiguration = 'nextYak.css.validate'
+type CssCompletionService = Pick<CssLanguageService, 'doComplete' | 'parseStylesheet'>
 
 export function activate(context: vscode.ExtensionContext) {
   const templateCache = new NextYakTemplateCache()
@@ -178,7 +180,10 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export class NextYakCssCompletionProvider implements vscode.CompletionItemProvider {
-  constructor(private readonly templateCache = new NextYakTemplateCache()) {}
+  constructor(
+    private readonly templateCache = new NextYakTemplateCache(),
+    private readonly cssCompletionService: CssCompletionService = cssLanguageService,
+  ) {}
 
   invalidateDocument(uri: string): void {
     this.templateCache.invalidateDocument(uri)
@@ -209,12 +214,11 @@ export class NextYakCssCompletionProvider implements vscode.CompletionItemProvid
 
     const virtualCss = createVirtualCssDocument(document, template)
     const virtualOffset = virtualCss.prefixLength + cursorOffset - template.bodyStart
-    const stylesheet = cssLanguageService.parseStylesheet(virtualCss.document)
     const atRuleContext = getAtRuleCompletionContext(source, cursorOffset, template)
-    const completions = cssLanguageService.doComplete(
+    const cssItems = getCssCompletionItems(
+      this.cssCompletionService,
       virtualCss.document,
       virtualCss.document.positionAt(virtualOffset),
-      stylesheet,
     )
 
     if (token.isCancellationRequested) {
@@ -223,22 +227,27 @@ export class NextYakCssCompletionProvider implements vscode.CompletionItemProvid
 
     const selectorContext = getSelectorCompletionContext(source, cursorOffset, template)
     const usesSelectorFallback = selectorContext && isSelectorCompletionContext(selectorContext)
-    const items = completions.items
+    const items = cssItems
       .filter((item) => shouldIncludeCssCompletion(item, atRuleContext, Boolean(usesSelectorFallback)))
       .flatMap((item) => {
-        const completion = toCompletionItem(item, document, virtualCss)
+        const completion = toSafeCompletionItem(item, document, virtualCss)
         return completion ? [completion] : []
       })
     const existingLabels = new Set(items.map((item) => typeof item.label === 'string' ? item.label : item.label.label))
     const atRuleItems = getAtRuleCompletionItems(document, atRuleContext, existingLabels)
     atRuleItems.forEach((item) => existingLabels.add(completionLabel(item)))
     const selectorItems = getSelectorCompletionItems(
+      this.cssCompletionService,
       source,
       cursorOffset,
       document,
       template,
       existingLabels,
     )
+
+    if (token.isCancellationRequested) {
+      return undefined
+    }
 
     return new vscode.CompletionList([...items, ...atRuleItems, ...selectorItems], true)
   }
@@ -665,6 +674,7 @@ function createVirtualCssDocument(
 }
 
 function getSelectorCompletionItems(
+  cssCompletionService: CssCompletionService,
   source: string,
   cursorOffset: number,
   document: vscode.TextDocument,
@@ -678,19 +688,41 @@ function getSelectorCompletionItems(
   }
 
   const selectorDocument = createSelectorDocument(document, selectorContext)
-  const stylesheet = cssLanguageService.parseStylesheet(selectorDocument.document)
-  const completions = cssLanguageService.doComplete(
+  const cssItems = getCssCompletionItems(
+    cssCompletionService,
     selectorDocument.document,
     selectorDocument.document.positionAt(selectorContext.text.length),
-    stylesheet,
   )
 
-  return completions.items
+  return cssItems
     .filter((item) => item.label.startsWith(':') && !existingLabels.has(item.label))
     .flatMap((item) => {
-      const completion = toSelectorCompletionItem(item, document, selectorDocument, selectorContext)
+      const completion = toSafeSelectorCompletionItem(item, document, selectorDocument, selectorContext)
       return completion ? [completion] : []
     })
+}
+
+function getCssCompletionItems(
+  cssCompletionService: CssCompletionService,
+  document: TextDocument,
+  position: Parameters<CssCompletionService['doComplete']>[1],
+): CssCompletionItem[] {
+  try {
+    const stylesheet = cssCompletionService.parseStylesheet(document)
+    const completions = cssCompletionService.doComplete(document, position, stylesheet)
+
+    return Array.isArray(completions?.items)
+      ? completions.items.filter(isCssCompletionItem)
+      : []
+  } catch {
+    return []
+  }
+}
+
+function isCssCompletionItem(value: unknown): value is CssCompletionItem {
+  return Boolean(value)
+    && typeof value === 'object'
+    && typeof (value as { label?: unknown }).label === 'string'
 }
 
 function shouldIncludeCssCompletion(
@@ -858,6 +890,31 @@ function toSelectorCompletionItem(
   completion.filterText = selectorText
 
   return completion
+}
+
+function toSafeSelectorCompletionItem(
+  item: CssCompletionItem,
+  document: vscode.TextDocument,
+  selectorDocument: VirtualCssDocument,
+  selectorContext: SelectorCompletionContext,
+): vscode.CompletionItem | undefined {
+  try {
+    return toSelectorCompletionItem(item, document, selectorDocument, selectorContext)
+  } catch {
+    return undefined
+  }
+}
+
+function toSafeCompletionItem(
+  item: CssCompletionItem,
+  document: vscode.TextDocument,
+  virtualCss: VirtualCssDocument,
+): vscode.CompletionItem | undefined {
+  try {
+    return toCompletionItem(item, document, virtualCss)
+  } catch {
+    return undefined
+  }
 }
 
 function toCompletionItem(

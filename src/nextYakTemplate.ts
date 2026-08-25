@@ -156,11 +156,15 @@ export class NextYakTemplateCache {
 
     const analysis = this.getAnalysis(document)
 
-    return findNextYakTemplateInAnalysis(document.source, cursorOffset, analysis)
+    return analysis ? findNextYakTemplateInAnalysis(document.source, cursorOffset, analysis) : undefined
   }
 
   findTemplates(document: NextYakTemplateDocument): readonly NextYakTemplate[] {
     const analysis = this.getAnalysis(document)
+
+    if (!analysis) {
+      return []
+    }
 
     return analysis.taggedTemplates.flatMap((taggedTemplate) => {
       const template = createTemplate(
@@ -178,12 +182,24 @@ export class NextYakTemplateCache {
     this.analyses.delete(uri)
   }
 
-  private getAnalysis(document: NextYakTemplateDocument): CachedNextYakTemplateAnalysis {
-    let analysis = this.analyses.get(document.uri)
+  private getAnalysis(document: NextYakTemplateDocument): CachedNextYakTemplateAnalysis | undefined {
+    const cachedAnalysis = this.analyses.get(document.uri)
 
-    if (!analysis || !matchesDocument(analysis, document)) {
-      analysis = createNextYakTemplateAnalysis(document.source, document.languageId, document.fileName, document.version)
+    if (cachedAnalysis && matchesDocument(cachedAnalysis, document)) {
+      return cachedAnalysis
+    }
+
+    const analysis = tryCreateNextYakTemplateAnalysis(
+      document.source,
+      document.languageId,
+      document.fileName,
+      document.version,
+    )
+
+    if (analysis) {
       this.analyses.set(document.uri, analysis)
+    } else {
+      this.analyses.delete(document.uri)
     }
 
     return analysis
@@ -229,9 +245,9 @@ export function findNextYakTemplate(
     return undefined
   }
 
-  const analysis = createNextYakTemplateAnalysis(source, languageId, fileName, 0)
+  const analysis = tryCreateNextYakTemplateAnalysis(source, languageId, fileName, 0)
 
-  return findNextYakTemplateInAnalysis(source, cursorOffset, analysis)
+  return analysis ? findNextYakTemplateInAnalysis(source, cursorOffset, analysis) : undefined
 }
 
 export function findStaticNextYakTemplates(
@@ -239,25 +255,29 @@ export function findStaticNextYakTemplates(
   languageId: string,
   fileName: string,
 ): readonly NextYakTemplate[] {
-  const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, toScriptKind(languageId))
-  const templates: NextYakTemplate[] = []
+  try {
+    const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, toScriptKind(languageId))
+    const templates: NextYakTemplate[] = []
 
-  const visit = (node: ts.Node) => {
-    if (ts.isTaggedTemplateExpression(node)) {
-      const tag = getStaticNextYakTag(node.tag)
-      const template = tag && createTemplate(source, sourceFile, node, tag)
+    const visit = (node: ts.Node) => {
+      if (ts.isTaggedTemplateExpression(node)) {
+        const tag = getStaticNextYakTag(node.tag)
+        const template = tag && createTemplate(source, sourceFile, node, tag)
 
-      if (template) {
-        templates.push(template)
+        if (template) {
+          templates.push(template)
+        }
       }
+
+      ts.forEachChild(node, visit)
     }
 
-    ts.forEachChild(node, visit)
+    visit(sourceFile)
+
+    return templates
+  } catch {
+    return []
   }
-
-  visit(sourceFile)
-
-  return templates
 }
 
 function matchesDocument(
@@ -313,6 +333,19 @@ function createNextYakTemplateAnalysis(
     sourceFile,
     taggedTemplates,
     version,
+  }
+}
+
+function tryCreateNextYakTemplateAnalysis(
+  source: string,
+  languageId: string,
+  fileName: string,
+  version: number,
+): CachedNextYakTemplateAnalysis | undefined {
+  try {
+    return createNextYakTemplateAnalysis(source, languageId, fileName, version)
+  } catch {
+    return undefined
   }
 }
 

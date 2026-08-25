@@ -158,11 +158,11 @@
 
 ### 性能与可靠性
 
-- [ ] 为输入单字符、连续输入、手动触发补全和大文件补全定义可测量的延迟预算。
+- [x] 已为输入单字符、连续输入、手动触发补全和 250 个 tagged template 文档的补全定义并执行可测延迟预算。
+- [x] 已为多光标、快速编辑、撤销重做和 provider cancellation 添加真实 Extension Host 稳定性测试。
+- [x] 已为异常 CSS Language Service 返回值、损坏 custom data 和 TypeScript parser 异常添加安全降级与恢复测试。
 - [ ] 为包含数百个 tagged template 的文件添加性能基准以监控 AST 解析和 CSS 补全成本。
-- [ ] 为多光标、快速编辑、撤销重做和 provider cancellation 添加稳定性测试。
 - [ ] 为超长插值、深层嵌套对象、正则字面量和嵌套模板字面量添加插值扫描压力测试。
-- [ ] 为异常 CSS Language Service 返回值、损坏 custom data 和 TypeScript parser 异常添加降级行为测试。
 - [ ] 在开发模式中提供可选的调试日志开关以定位模板识别、虚拟 CSS 和范围映射问题。
 
 ### 兼容性矩阵

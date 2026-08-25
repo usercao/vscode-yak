@@ -1,17 +1,20 @@
 import { describe, expect, it, vi } from 'vitest'
 
-const { createProgramSpy } = vi.hoisted(() => ({
+const { createProgramSpy, createSourceFileSpy } = vi.hoisted(() => ({
   createProgramSpy: vi.fn(),
+  createSourceFileSpy: vi.fn(),
 }))
 
 vi.mock('typescript', async (importOriginal) => {
   const actual = await importOriginal<typeof import('typescript')>()
 
   createProgramSpy.mockImplementation(actual.createProgram)
+  createSourceFileSpy.mockImplementation(actual.createSourceFile)
 
   return {
     ...actual,
     createProgram: createProgramSpy,
+    createSourceFile: createSourceFileSpy,
   }
 })
 
@@ -577,6 +580,22 @@ describe('NextYakTemplateCache', () => {
     expect(cache.findTemplate(tsx.document, tsx.cursorOffset)?.tag).toBe('styled')
     expect(cache.findTemplate(javascript, tsx.cursorOffset)?.tag).toBe('styled')
     expect(createProgramSpy).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not cache a failed TypeScript parse and recovers on the next request', () => {
+    const cache = new NextYakTemplateCache()
+    const request = templateCacheRequest(styledSource('styled.div'), 1)
+
+    createSourceFileSpy.mockClear()
+    createSourceFileSpy.mockImplementationOnce(() => {
+      throw new Error('TypeScript parser unavailable')
+    })
+
+    expect(cache.findTemplate(request.document, request.cursorOffset)).toBeUndefined()
+    expect(cache.size).toBe(0)
+    expect(cache.findTemplate(request.document, request.cursorOffset)?.tag).toBe('styled')
+    expect(cache.size).toBe(1)
+    expect(createSourceFileSpy).toHaveBeenCalledTimes(2)
   })
 })
 
