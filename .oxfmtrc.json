@@ -1,0 +1,20 @@
+{
+  "semi": false,
+  "singleQuote": true,
+  "sortImports": true,
+  "sortPackageJson": {
+    "sortScripts": true
+  },
+  "ignorePatterns": [
+    ".yarn/**",
+    ".vscode-test/**",
+    "build/**",
+    "dist/**",
+    "node_modules/**",
+    "**/*.tsbuildinfo",
+    "**/*.vsix",
+    "yarn.lock",
+    "docs/**",
+    "test-workspace/**"
+  ]
+}

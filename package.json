@@ -8,30 +8,34 @@
   ],
   "keywords": [
     "css-in-js",
-    "yak",
-    "syntax-highlighting"
+    "syntax-highlighting",
+    "yak"
   ],
+  "homepage": "https://github.com/usercao/vscode-yak#readme",
+  "bugs": {
+    "url": "https://github.com/usercao/vscode-yak/issues"
+  },
   "license": "MIT",
-  "publisher": "local",
   "repository": {
     "type": "git",
     "url": "https://github.com/usercao/vscode-yak.git"
   },
-  "bugs": {
-    "url": "https://github.com/usercao/vscode-yak/issues"
-  },
-  "homepage": "https://github.com/usercao/vscode-yak#readme",
+  "publisher": "local",
   "type": "module",
   "main": "./dist/extension.cjs",
   "scripts": {
     "build": "tsdown",
     "check": "tsc --noEmit",
+    "format": "yarn exec oxfmt --write .",
+    "format:check": "yarn exec oxfmt --check .",
+    "lint": "yarn exec oxlint .",
+    "lint:fix": "yarn exec oxlint --fix .",
+    "package": "node -e \"require('node:fs').mkdirSync('build', { recursive: true })\" && yarn vsce package --no-yarn --no-dependencies --out ./build/vscode-yak-${npm_package_version}.vsix",
     "test": "vitest run",
-    "test:integration:build": "tsdown --config tsdown.tests.config.ts",
     "test:integration": "yarn build && yarn test:integration:build && node ./.vscode-test/compiled/runExtensionTests.cjs",
+    "test:integration:build": "tsdown --config tsdown.tests.config.ts",
     "verify": "yarn check && yarn test && yarn test:integration && yarn package",
-    "vscode:prepublish": "yarn build",
-    "package": "node -e \"require('node:fs').mkdirSync('build', { recursive: true })\" && yarn vsce package --no-yarn --no-dependencies --out ./build/vscode-yak-${npm_package_version}.vsix"
+    "vscode:prepublish": "yarn build"
   },
   "dependencies": {
     "color-name": "^2.1.1",
@@ -44,6 +48,8 @@
     "@types/vscode": "^1.134.0",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "3.9.2",
+    "oxfmt": "^0.65.0",
+    "oxlint": "^1.80.0",
     "tsdown": "^0.22.14",
     "typescript": "~6.0.2",
     "vitest": "^4.1.11",
@@ -91,14 +97,14 @@
     ]
   },
   "activationEvents": [
-    "onLanguage:typescript",
-    "onLanguage:typescriptreact",
     "onLanguage:javascript",
-    "onLanguage:javascriptreact"
+    "onLanguage:javascriptreact",
+    "onLanguage:typescript",
+    "onLanguage:typescriptreact"
   ],
   "engines": {
-    "vscode": "^1.134.0",
-    "node": ">=24.19.0"
+    "node": ">=24.19.0",
+    "vscode": "^1.134.0"
   },
   "packageManager": "yarn@4.18.0"
 }

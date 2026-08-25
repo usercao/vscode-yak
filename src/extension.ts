@@ -16,20 +16,15 @@ import {
   type Range as CssRange,
 } from 'vscode-css-languageservice'
 import { TextDocument } from 'vscode-languageserver-textdocument'
-import {
-  getMappedCssHover,
-  type VirtualCssDocument,
-} from './hover'
-import {
-  getMappedCssDiagnostics,
-  type MappedCssDiagnostic,
-} from './diagnostics'
+
 import { mapVirtualCssCodeAction } from './codeActions'
 import {
   getMappedCssColorPresentations,
   getMappedCssColors,
   type MappedCssColorPresentation,
 } from './colors'
+import { getMappedCssDiagnostics, type MappedCssDiagnostic } from './diagnostics'
+import { getMappedCssHover, type VirtualCssDocument } from './hover'
 import {
   createVirtualCssText,
   getAtRuleCompletionContext,
@@ -43,7 +38,9 @@ import {
 
 const cssLanguageService = getCSSLanguageService()
 const cssPropertyNames = new Set(
-  getDefaultCSSDataProvider().provideProperties().map((property) => property.name),
+  getDefaultCSSDataProvider()
+    .provideProperties()
+    .map((property) => property.name),
 )
 const cssAtDirectives = getDefaultCSSDataProvider().provideAtDirectives()
 const cssProperties = getDefaultCSSDataProvider().provideProperties()
@@ -82,8 +79,14 @@ const supportedDocumentSelector: vscode.DocumentSelector = [
   { language: 'typescript' },
   { language: 'typescriptreact' },
 ]
-const supportedLanguageIds = new Set(['javascript', 'javascriptreact', 'typescript', 'typescriptreact'])
-const cssCompletionTriggerCharacters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ:-@'.split('')
+const supportedLanguageIds = new Set([
+  'javascript',
+  'javascriptreact',
+  'typescript',
+  'typescriptreact',
+])
+const cssCompletionTriggerCharacters =
+  'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ:-@'.split('')
 const cssDiagnosticSource = 'yak CSS'
 const cssValidateConfiguration = 'yak.css.validate'
 type CssCompletionService = Pick<CssLanguageService, 'doComplete' | 'parseStylesheet'>
@@ -131,11 +134,9 @@ export function activate(context: vscode.ExtensionContext) {
       ...cssCompletionTriggerCharacters,
     ),
     vscode.languages.registerHoverProvider(supportedDocumentSelector, hoverProvider),
-    vscode.languages.registerCodeActionsProvider(
-      supportedDocumentSelector,
-      codeActionProvider,
-      { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] },
-    ),
+    vscode.languages.registerCodeActionsProvider(supportedDocumentSelector, codeActionProvider, {
+      providedCodeActionKinds: [vscode.CodeActionKind.QuickFix],
+    }),
     vscode.languages.registerColorProvider(supportedDocumentSelector, colorProvider),
   )
 
@@ -163,13 +164,16 @@ export class CssCompletionProvider implements vscode.CompletionItemProvider {
 
     const source = document.getText()
     const cursorOffset = document.offsetAt(position)
-    const template = this.templateCache.findTemplate({
-      fileName: document.fileName,
-      languageId: document.languageId,
-      source,
-      uri: document.uri.toString(),
-      version: document.version,
-    }, cursorOffset)
+    const template = this.templateCache.findTemplate(
+      {
+        fileName: document.fileName,
+        languageId: document.languageId,
+        source,
+        uri: document.uri.toString(),
+        version: document.version,
+      },
+      cursorOffset,
+    )
 
     if (!template) {
       return undefined
@@ -191,12 +195,16 @@ export class CssCompletionProvider implements vscode.CompletionItemProvider {
     const selectorContext = getSelectorCompletionContext(source, cursorOffset, template)
     const usesSelectorFallback = selectorContext && isSelectorCompletionContext(selectorContext)
     const items = cssItems
-      .filter((item) => shouldIncludeCssCompletion(item, atRuleContext, Boolean(usesSelectorFallback)))
+      .filter((item) =>
+        shouldIncludeCssCompletion(item, atRuleContext, Boolean(usesSelectorFallback)),
+      )
       .flatMap((item) => {
         const completion = toSafeCompletionItem(item, document, virtualCss)
         return completion ? [completion] : []
       })
-    const existingLabels = new Set(items.map((item) => typeof item.label === 'string' ? item.label : item.label.label))
+    const existingLabels = new Set(
+      items.map((item) => (typeof item.label === 'string' ? item.label : item.label.label)),
+    )
     const atRuleItems = getAtRuleCompletionItems(document, atRuleContext, existingLabels)
     atRuleItems.forEach((item) => existingLabels.add(completionLabel(item)))
     const selectorItems = getSelectorCompletionItems(
@@ -230,13 +238,16 @@ export class CssHoverProvider implements vscode.HoverProvider {
 
     const source = document.getText()
     const cursorOffset = document.offsetAt(position)
-    const template = this.templateCache.findTemplate({
-      fileName: document.fileName,
-      languageId: document.languageId,
-      source,
-      uri: document.uri.toString(),
-      version: document.version,
-    }, cursorOffset)
+    const template = this.templateCache.findTemplate(
+      {
+        fileName: document.fileName,
+        languageId: document.languageId,
+        source,
+        uri: document.uri.toString(),
+        version: document.version,
+      },
+      cursorOffset,
+    )
 
     if (!template) {
       return undefined
@@ -255,7 +266,10 @@ export class CssHoverProvider implements vscode.HoverProvider {
 
     return new vscode.Hover(
       toHoverContents(hover.contents),
-      new vscode.Range(document.positionAt(hover.range.start), document.positionAt(hover.range.end)),
+      new vscode.Range(
+        document.positionAt(hover.range.start),
+        document.positionAt(hover.range.end),
+      ),
     )
   }
 }
@@ -354,7 +368,10 @@ export class CssCodeActionProvider implements vscode.CodeActionProvider {
           continue
         }
 
-        const action = new vscode.CodeAction(mappedAction.title, toCodeActionKind(mappedAction.kind))
+        const action = new vscode.CodeAction(
+          mappedAction.title,
+          toCodeActionKind(mappedAction.kind),
+        )
         const edit = new vscode.WorkspaceEdit()
 
         for (const textEdit of mappedAction.edits) {
@@ -400,10 +417,12 @@ export class CssColorProvider implements vscode.DocumentColorProvider {
           return undefined
         }
 
-        colors.push(new vscode.ColorInformation(
-          toDocumentRangeFromOffsets(document, color.range),
-          toVscodeColor(color.color),
-        ))
+        colors.push(
+          new vscode.ColorInformation(
+            toDocumentRangeFromOffsets(document, color.range),
+            toVscodeColor(color.color),
+          ),
+        )
       }
     }
 
@@ -427,8 +446,9 @@ export class CssColorProvider implements vscode.DocumentColorProvider {
       }
 
       const virtualCss = createVirtualCssDocument(context.document, template)
-      const isKnownColorRange = getMappedCssColors(cssLanguageService, template, virtualCss)
-        .some((knownColor) => isSameOffsetRange(knownColor.range, sourceRange))
+      const isKnownColorRange = getMappedCssColors(cssLanguageService, template, virtualCss).some(
+        (knownColor) => isSameOffsetRange(knownColor.range, sourceRange),
+      )
 
       if (!isKnownColorRange) {
         continue
@@ -467,7 +487,10 @@ function getTemplateDocument(document: vscode.TextDocument) {
   }
 }
 
-function toDocumentRangeFromOffsets(document: vscode.TextDocument, range: { end: number; start: number }) {
+function toDocumentRangeFromOffsets(
+  document: vscode.TextDocument,
+  range: { end: number; start: number },
+) {
   return new vscode.Range(document.positionAt(range.start), document.positionAt(range.end))
 }
 
@@ -478,7 +501,10 @@ function toOffsetRange(document: vscode.TextDocument, range: vscode.Range) {
   }
 }
 
-function isSameOffsetRange(left: { end: number; start: number }, right: { end: number; start: number }) {
+function isSameOffsetRange(
+  left: { end: number; start: number },
+  right: { end: number; start: number },
+) {
   return left.start === right.start && left.end === right.end
 }
 
@@ -505,9 +531,9 @@ function toVscodeColorPresentation(
     toDocumentRangeFromOffsets(document, presentation.textEdit.range),
     presentation.textEdit.newText,
   )
-  colorPresentation.additionalTextEdits = presentation.additionalTextEdits?.map((textEdit) => (
-    vscode.TextEdit.replace(toDocumentRangeFromOffsets(document, textEdit.range), textEdit.newText)
-  ))
+  colorPresentation.additionalTextEdits = presentation.additionalTextEdits?.map((textEdit) =>
+    vscode.TextEdit.replace(toDocumentRangeFromOffsets(document, textEdit.range), textEdit.newText),
+  )
 
   return colorPresentation
 }
@@ -516,7 +542,10 @@ function isCssValidationEnabled(resource: vscode.Uri) {
   return vscode.workspace.getConfiguration('yak', resource).get<boolean>('css.validate', true)
 }
 
-function toDiagnostic(document: vscode.TextDocument, mappedDiagnostic: MappedCssDiagnostic): vscode.Diagnostic {
+function toDiagnostic(
+  document: vscode.TextDocument,
+  mappedDiagnostic: MappedCssDiagnostic,
+): vscode.Diagnostic {
   const diagnostic = new vscode.Diagnostic(
     new vscode.Range(
       document.positionAt(mappedDiagnostic.range.start),
@@ -557,14 +586,17 @@ function getMatchingDiagnostics(
       document.positionAt(mappedDiagnostic.range.start),
       document.positionAt(mappedDiagnostic.range.end),
     )
-    const matchingDiagnostic = diagnostics.find((diagnostic) => (
-      diagnostic.source === cssDiagnosticSource
-      && diagnostic.code === mappedDiagnostic.diagnostic.code
-      && diagnostic.message === mappedDiagnostic.diagnostic.message
-      && diagnostic.range.isEqual(sourceRange)
-    ))
+    const matchingDiagnostic = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.source === cssDiagnosticSource &&
+        diagnostic.code === mappedDiagnostic.diagnostic.code &&
+        diagnostic.message === mappedDiagnostic.diagnostic.message &&
+        diagnostic.range.isEqual(sourceRange),
+    )
 
-    return matchingDiagnostic ? [{ sourceDiagnostic: matchingDiagnostic, virtualDiagnostic: mappedDiagnostic.diagnostic }] : []
+    return matchingDiagnostic
+      ? [{ sourceDiagnostic: matchingDiagnostic, virtualDiagnostic: mappedDiagnostic.diagnostic }]
+      : []
   })
 }
 
@@ -576,20 +608,24 @@ function getActionDiagnostics(
     return []
   }
 
-  return diagnostics.flatMap(({ sourceDiagnostic, virtualDiagnostic }) => (
-    action.diagnostics?.some((actionDiagnostic) => isSameCssDiagnostic(actionDiagnostic, virtualDiagnostic))
+  return diagnostics.flatMap(({ sourceDiagnostic, virtualDiagnostic }) =>
+    action.diagnostics?.some((actionDiagnostic) =>
+      isSameCssDiagnostic(actionDiagnostic, virtualDiagnostic),
+    )
       ? [sourceDiagnostic]
-      : []
-  ))
+      : [],
+  )
 }
 
 function isSameCssDiagnostic(left: CssDiagnostic, right: CssDiagnostic) {
-  return left.code === right.code
-    && left.message === right.message
-    && left.range.start.line === right.range.start.line
-    && left.range.start.character === right.range.start.character
-    && left.range.end.line === right.range.end.line
-    && left.range.end.character === right.range.end.character
+  return (
+    left.code === right.code &&
+    left.message === right.message &&
+    left.range.start.line === right.range.start.line &&
+    left.range.start.character === right.range.start.character &&
+    left.range.end.line === right.range.end.line &&
+    left.range.end.character === right.range.end.character
+  )
 }
 
 function getVirtualTemplateRange(template: Template, virtualCss: VirtualCssDocument): CssRange {
@@ -660,7 +696,12 @@ function getSelectorCompletionItems(
   return cssItems
     .filter((item) => item.label.startsWith(':') && !existingLabels.has(item.label))
     .flatMap((item) => {
-      const completion = toSafeSelectorCompletionItem(item, document, selectorDocument, selectorContext)
+      const completion = toSafeSelectorCompletionItem(
+        item,
+        document,
+        selectorDocument,
+        selectorContext,
+      )
       return completion ? [completion] : []
     })
 }
@@ -674,18 +715,18 @@ function getCssCompletionItems(
     const stylesheet = cssCompletionService.parseStylesheet(document)
     const completions = cssCompletionService.doComplete(document, position, stylesheet)
 
-    return Array.isArray(completions?.items)
-      ? completions.items.filter(isCssCompletionItem)
-      : []
+    return Array.isArray(completions?.items) ? completions.items.filter(isCssCompletionItem) : []
   } catch {
     return []
   }
 }
 
 function isCssCompletionItem(value: unknown): value is CssCompletionItem {
-  return Boolean(value)
-    && typeof value === 'object'
-    && typeof (value as { label?: unknown }).label === 'string'
+  return (
+    Boolean(value) &&
+    typeof value === 'object' &&
+    typeof (value as { label?: unknown }).label === 'string'
+  )
 }
 
 function shouldIncludeCssCompletion(
@@ -694,9 +735,9 @@ function shouldIncludeCssCompletion(
   usesSelectorFallback: boolean,
 ) {
   if (
-    atRuleContext?.kind === 'blocked'
-    || atRuleContext?.kind === 'descriptor'
-    || atRuleContext?.kind === 'name'
+    atRuleContext?.kind === 'blocked' ||
+    atRuleContext?.kind === 'descriptor' ||
+    atRuleContext?.kind === 'name'
   ) {
     return false
   }
@@ -709,10 +750,7 @@ function shouldIncludeCssCompletion(
     return false
   }
 
-  if (
-    atRuleContext?.kind === 'rule'
-    || atRuleContext?.kind === 'descriptor-value'
-  ) {
+  if (atRuleContext?.kind === 'rule' || atRuleContext?.kind === 'descriptor-value') {
     return !item.label.startsWith(':')
   }
 
@@ -725,11 +763,11 @@ function getAtRuleCompletionItems(
   existingLabels: ReadonlySet<string>,
 ): vscode.CompletionItem[] {
   if (
-    !context
-    || context.kind === 'blocked'
-    || context.kind === 'descriptor-value'
-    || context.kind === 'prelude'
-    || context.kind === 'rule'
+    !context ||
+    context.kind === 'blocked' ||
+    context.kind === 'descriptor-value' ||
+    context.kind === 'prelude' ||
+    context.kind === 'rule'
   ) {
     return []
   }
@@ -738,20 +776,28 @@ function getAtRuleCompletionItems(
     const fallbackPropertyNames = descriptorFallbackPropertyNames.get(context.atRuleName)
 
     return cssProperties
-      .filter((property) => property.atRule === context.atRuleName || fallbackPropertyNames?.has(property.name))
+      .filter(
+        (property) =>
+          property.atRule === context.atRuleName || fallbackPropertyNames?.has(property.name),
+      )
       .filter((property) => property.name.startsWith(context.text.toLowerCase()))
       .filter((property) => !existingLabels.has(property.name))
-      .map((property) => toDataPropertyCompletionItem(property, document, context.sourceStart, context.text.length))
+      .map((property) =>
+        toDataPropertyCompletionItem(property, document, context.sourceStart, context.text.length),
+      )
   }
 
   return cssAtDirectives
-    .filter((atRule) => (
-      nestedAtRuleNames.has(atRule.name)
-      || (context.allowsTopLevelRules && globalStyleAtRuleNames.has(atRule.name))
-    ))
+    .filter(
+      (atRule) =>
+        nestedAtRuleNames.has(atRule.name) ||
+        (context.allowsTopLevelRules && globalStyleAtRuleNames.has(atRule.name)),
+    )
     .filter((atRule) => atRule.name.startsWith(context.text.toLowerCase()))
     .filter((atRule) => !existingLabels.has(atRule.name))
-    .map((atRule) => toAtRuleCompletionItem(atRule, document, context.sourceStart, context.text.length))
+    .map((atRule) =>
+      toAtRuleCompletionItem(atRule, document, context.sourceStart, context.text.length),
+    )
 }
 
 function toAtRuleCompletionItem(
@@ -903,9 +949,7 @@ function toCompletionItem(
     const replacementText = document.getText(range)
     const filterText = item.filterText ?? item.label
 
-    completion.filterText = filterText
-      .toLowerCase()
-      .startsWith(replacementText.toLowerCase())
+    completion.filterText = filterText.toLowerCase().startsWith(replacementText.toLowerCase())
       ? replacementText
       : item.filterText
   } else if (item.insertText) {

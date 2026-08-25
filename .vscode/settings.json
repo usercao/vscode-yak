@@ -41,11 +41,11 @@
   "oxc.disableNestedConfig": true,
   "oxc.fmt.disableNestedConfig": true,
 
-  // 关闭 Copilot 所有语言的内联补全
+  // Disable Copilot inline suggestions for all languages
   "github.copilot.enable": {
     "*": false
   },
 
-  // 关闭 Copilot 的“下一处编辑建议”
+  // Disable Copilot next edit suggestions
   "github.copilot.nextEditSuggestions.enabled": false
 }

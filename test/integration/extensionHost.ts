@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+
 import * as vscode from 'vscode'
 import {
   getCSSLanguageService,
@@ -45,7 +46,10 @@ interface DirectCompletionProvider {
 }
 
 interface DirectCompletionProviderConstructor {
-  new (templateCache?: undefined, cssCompletionService?: CssCompletionService): DirectCompletionProvider
+  new (
+    templateCache?: undefined,
+    cssCompletionService?: CssCompletionService,
+  ): DirectCompletionProvider
 }
 
 interface DirectHoverProvider {
@@ -122,21 +126,34 @@ function extensionItems(items: readonly vscode.CompletionItem[]): vscode.Complet
   return items.filter((item) => item.sortText?.startsWith(extensionSortPrefix))
 }
 
-function findExtensionItem(items: readonly vscode.CompletionItem[], label: string): vscode.CompletionItem | undefined {
+function findExtensionItem(
+  items: readonly vscode.CompletionItem[],
+  label: string,
+): vscode.CompletionItem | undefined {
   return extensionItems(items).find((item) => completionLabel(item) === label)
 }
 
-function assertRangeWithinDocument(document: vscode.TextDocument, item: vscode.CompletionItem): void {
+function assertRangeWithinDocument(
+  document: vscode.TextDocument,
+  item: vscode.CompletionItem,
+): void {
   const range = completionRange(item)
   const start = document.offsetAt(range.start)
   const end = document.offsetAt(range.end)
 
   assert.ok(start >= 0, `Expected ${completionLabel(item)} range to start inside the document`)
   assert.ok(end >= start, `Expected ${completionLabel(item)} range to be ordered`)
-  assert.ok(end <= document.getText().length, `Expected ${completionLabel(item)} range to end inside the document`)
+  assert.ok(
+    end <= document.getText().length,
+    `Expected ${completionLabel(item)} range to end inside the document`,
+  )
 }
 
-async function completionItems({ language = 'typescriptreact', source, uri }: CompletionOptions): Promise<CompletionResult> {
+async function completionItems({
+  language = 'typescriptreact',
+  source,
+  uri,
+}: CompletionOptions): Promise<CompletionResult> {
   const cursorOffset = source.indexOf(cursorMarker)
 
   assert.notEqual(cursorOffset, -1, `Missing ${cursorMarker} marker`)
@@ -144,9 +161,9 @@ async function completionItems({ language = 'typescriptreact', source, uri }: Co
   let document: vscode.TextDocument = uri
     ? await vscode.workspace.openTextDocument(uri)
     : await vscode.workspace.openTextDocument({
-      language,
-      content: source.replace(cursorMarker, ''),
-    })
+        language,
+        content: source.replace(cursorMarker, ''),
+      })
 
   if (document.languageId !== language) {
     document = await vscode.languages.setTextDocumentLanguage(document, language)
@@ -198,12 +215,19 @@ async function assertPropertyCompletion(options: PropertyCompletionOptions): Pro
   const { document, items } = await completionItems(completionOptions)
   const item = findExtensionItem(items, expectedLabel)
 
-  assert.ok(item, `Expected yak ${expectedLabel} completion in ${extensionItems(items).map(completionLabel).join(', ')}`)
+  assert.ok(
+    item,
+    `Expected yak ${expectedLabel} completion in ${extensionItems(items).map(completionLabel).join(', ')}`,
+  )
   assertRangeWithinDocument(document, item)
   return { document, item, items }
 }
 
-async function assertPseudoCompletion(selector: string, expectedLabel: string, expectedInsertText: string): Promise<void> {
+async function assertPseudoCompletion(
+  selector: string,
+  expectedLabel: string,
+  expectedInsertText: string,
+): Promise<void> {
   const { document, items } = await completionItems({
     source: [
       "import { styled } from 'yak'",
@@ -214,7 +238,10 @@ async function assertPseudoCompletion(selector: string, expectedLabel: string, e
   })
   const item = findExtensionItem(items, expectedLabel)
 
-  assert.ok(item, `Expected ${expectedLabel} in ${extensionItems(items).map(completionLabel).join(', ')}`)
+  assert.ok(
+    item,
+    `Expected ${expectedLabel} in ${extensionItems(items).map(completionLabel).join(', ')}`,
+  )
   const range = completionRange(item)
   assertRangeWithinDocument(document, item)
   assert.equal(document.getText(range), selector)
@@ -235,7 +262,10 @@ async function assertAtRuleCompletion(
   const { document, items } = await completionItems({ source })
   const item = findExtensionItem(items, expectedLabel)
 
-  assert.ok(item, `Expected yak ${expectedLabel} completion in ${extensionItems(items).map(completionLabel).join(', ')}`)
+  assert.ok(
+    item,
+    `Expected yak ${expectedLabel} completion in ${extensionItems(items).map(completionLabel).join(', ')}`,
+  )
   assertRangeWithinDocument(document, item)
   assert.equal(document.getText(completionRange(item)), expectedReplacement)
   assert.equal(completionInsertText(item), expectedInsertText)
@@ -249,7 +279,11 @@ async function assertNoPseudoFallback(source: string): Promise<void> {
     .map(completionLabel)
     .filter((label) => label.startsWith(':'))
 
-  assert.deepEqual(pseudoLabels, [], `Expected no yak pseudo fallback, received ${pseudoLabels.join(', ')}`)
+  assert.deepEqual(
+    pseudoLabels,
+    [],
+    `Expected no yak pseudo fallback, received ${pseudoLabels.join(', ')}`,
+  )
 }
 
 async function assertNoAtRuleCompletion(source: string): Promise<void> {
@@ -258,7 +292,11 @@ async function assertNoAtRuleCompletion(source: string): Promise<void> {
     .map(completionLabel)
     .filter((label) => label.startsWith('@'))
 
-  assert.deepEqual(atRuleLabels, [], `Expected no yak at-rule completion, received ${atRuleLabels.join(', ')}`)
+  assert.deepEqual(
+    atRuleLabels,
+    [],
+    `Expected no yak at-rule completion, received ${atRuleLabels.join(', ')}`,
+  )
 }
 
 async function assertNoExtensionCompletion(source: string): Promise<void> {
@@ -281,31 +319,43 @@ async function createDirectProvider(
   extensionPath: string,
   cssCompletionService?: CssCompletionService,
 ): Promise<DirectCompletionProvider> {
-  const extensionModule = await import(pathToFileURL(join(extensionPath, 'dist', 'extension.cjs')).href) as ExtensionModule
-  const Provider = extensionModule.CssCompletionProvider ?? extensionModule.default?.CssCompletionProvider
+  const extensionModule = (await import(
+    pathToFileURL(join(extensionPath, 'dist', 'extension.cjs')).href
+  )) as ExtensionModule
+  const Provider =
+    extensionModule.CssCompletionProvider ?? extensionModule.default?.CssCompletionProvider
 
   assert.ok(Provider, 'Expected the extension bundle to export CssCompletionProvider')
   return new Provider(undefined, cssCompletionService)
 }
 
 async function createDirectHoverProvider(extensionPath: string): Promise<DirectHoverProvider> {
-  const extensionModule = await import(pathToFileURL(join(extensionPath, 'dist', 'extension.cjs')).href) as ExtensionModule
+  const extensionModule = (await import(
+    pathToFileURL(join(extensionPath, 'dist', 'extension.cjs')).href
+  )) as ExtensionModule
   const Provider = extensionModule.CssHoverProvider ?? extensionModule.default?.CssHoverProvider
 
   assert.ok(Provider, 'Expected the extension bundle to export CssHoverProvider')
   return new Provider()
 }
 
-async function createDirectCodeActionProvider(extensionPath: string): Promise<DirectCodeActionProvider> {
-  const extensionModule = await import(pathToFileURL(join(extensionPath, 'dist', 'extension.cjs')).href) as ExtensionModule
-  const Provider = extensionModule.CssCodeActionProvider ?? extensionModule.default?.CssCodeActionProvider
+async function createDirectCodeActionProvider(
+  extensionPath: string,
+): Promise<DirectCodeActionProvider> {
+  const extensionModule = (await import(
+    pathToFileURL(join(extensionPath, 'dist', 'extension.cjs')).href
+  )) as ExtensionModule
+  const Provider =
+    extensionModule.CssCodeActionProvider ?? extensionModule.default?.CssCodeActionProvider
 
   assert.ok(Provider, 'Expected the extension bundle to export CssCodeActionProvider')
   return new Provider()
 }
 
 async function createDirectColorProvider(extensionPath: string): Promise<DirectColorProvider> {
-  const extensionModule = await import(pathToFileURL(join(extensionPath, 'dist', 'extension.cjs')).href) as ExtensionModule
+  const extensionModule = (await import(
+    pathToFileURL(join(extensionPath, 'dist', 'extension.cjs')).href
+  )) as ExtensionModule
   const Provider = extensionModule.CssColorProvider ?? extensionModule.default?.CssColorProvider
 
   assert.ok(Provider, 'Expected the extension bundle to export CssColorProvider')
@@ -329,7 +379,10 @@ const neverCancelledToken: vscode.CancellationToken = {
   onCancellationRequested: () => new vscode.Disposable(() => {}),
 }
 
-async function directProviderRequest(source: string, language = 'typescriptreact'): Promise<{
+async function directProviderRequest(
+  source: string,
+  language = 'typescriptreact',
+): Promise<{
   document: vscode.TextDocument
   position: vscode.Position
 }> {
@@ -348,7 +401,10 @@ async function directProviderRequest(source: string, language = 'typescriptreact
   }
 }
 
-async function completionItemsAt(document: vscode.TextDocument, cursorOffset: number): Promise<readonly vscode.CompletionItem[]> {
+async function completionItemsAt(
+  document: vscode.TextDocument,
+  cursorOffset: number,
+): Promise<readonly vscode.CompletionItem[]> {
   await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true })
 
   const completionList = await vscode.commands.executeCommand<vscode.CompletionList | undefined>(
@@ -362,7 +418,7 @@ async function completionItemsAt(document: vscode.TextDocument, cursorOffset: nu
 
 function hoverContentText(hover: vscode.Hover): string {
   return hover.contents
-    .map((content) => typeof content === 'string' ? content : content.value)
+    .map((content) => (typeof content === 'string' ? content : content.value))
     .join('\n')
 }
 
@@ -374,7 +430,10 @@ function hoverRange(hover: vscode.Hover): vscode.Range {
   return hover.range
 }
 
-async function registeredHoversAt(document: vscode.TextDocument, cursorOffset: number): Promise<readonly vscode.Hover[]> {
+async function registeredHoversAt(
+  document: vscode.TextDocument,
+  cursorOffset: number,
+): Promise<readonly vscode.Hover[]> {
   await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true })
 
   return vscode.commands.executeCommand<vscode.Hover[]>(
@@ -398,7 +457,9 @@ async function registeredCodeActionsAt(
   )
 }
 
-async function registeredDocumentColors(document: vscode.TextDocument): Promise<readonly vscode.ColorInformation[]> {
+async function registeredDocumentColors(
+  document: vscode.TextDocument,
+): Promise<readonly vscode.ColorInformation[]> {
   await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true })
 
   return vscode.commands.executeCommand<vscode.ColorInformation[]>(
@@ -422,22 +483,32 @@ async function registeredColorPresentations(
 }
 
 function diagnosticsFor(document: vscode.TextDocument): readonly vscode.Diagnostic[] {
-  return vscode.languages.getDiagnostics(document.uri)
+  return vscode.languages
+    .getDiagnostics(document.uri)
     .filter((diagnostic) => diagnostic.source === 'yak CSS')
 }
 
-function diagnosticForText(document: vscode.TextDocument, text: string): vscode.Diagnostic | undefined {
+function diagnosticForText(
+  document: vscode.TextDocument,
+  text: string,
+): vscode.Diagnostic | undefined {
   return diagnosticsFor(document).find((diagnostic) => document.getText(diagnostic.range) === text)
 }
 
-function workspaceEditEntries(action: vscode.CodeAction, document: vscode.TextDocument): readonly [vscode.Range, string][] {
+function workspaceEditEntries(
+  action: vscode.CodeAction,
+  document: vscode.TextDocument,
+): readonly [vscode.Range, string][] {
   if (!action.edit) {
     throw new Error(`Expected ${action.title} to include a workspace edit`)
   }
 
-  return action.edit.entries()
+  return action.edit
+    .entries()
     .filter(([uri]) => uri.toString() === document.uri.toString())
-    .flatMap(([, edits]) => edits.map((edit) => [edit.range, edit.newText] as [vscode.Range, string]))
+    .flatMap(([, edits]) =>
+      edits.map((edit) => [edit.range, edit.newText] as [vscode.Range, string]),
+    )
 }
 
 async function resourceExists(uri: vscode.Uri): Promise<boolean> {
@@ -496,7 +567,10 @@ export async function run(): Promise<void> {
       source: styledSource('col', 'styled.div<{ active: boolean }>'),
     })
     await assertPropertyCompletion({
-      source: styledSource('col', 'styled(Component).attrs<{ active: boolean }>({ role: "region" })'),
+      source: styledSource(
+        'col',
+        'styled(Component).attrs<{ active: boolean }>({ role: "region" })',
+      ),
     })
     await assertPropertyCompletion({
       source: styledSource('col', 'yak.styled.div', "import * as yak from 'yak'"),
@@ -573,12 +647,13 @@ export async function run(): Promise<void> {
   })
 
   await runCase('does not use pseudo fallback in declaration and at-rule contexts', async () => {
-    const sourceForLine = (line: string): string => [
-      "import { styled } from 'yak'",
-      'const Panel = styled.div`',
-      `  ${line}${cursorMarker}`,
-      '`',
-    ].join('\n')
+    const sourceForLine = (line: string): string =>
+      [
+        "import { styled } from 'yak'",
+        'const Panel = styled.div`',
+        `  ${line}${cursorMarker}`,
+        '`',
+      ].join('\n')
 
     await assertNoPseudoFallback(sourceForLine('unknown: value'))
     await assertNoPseudoFallback(sourceForLine('color: re'))
@@ -591,14 +666,7 @@ export async function run(): Promise<void> {
     const root = await assertAtRuleCompletion(atRuleSource('@'), '@media', '@')
     const rootLabels = new Set(extensionItems(root.items).map(completionLabel))
 
-    for (const label of [
-      '@media',
-      '@supports',
-      '@container',
-      '@layer',
-      '@scope',
-      '@keyframes',
-    ]) {
+    for (const label of ['@media', '@supports', '@container', '@layer', '@scope', '@keyframes']) {
       assert.ok(rootLabels.has(label), `Expected ${label} in standard at-rule candidates`)
     }
     for (const label of ['@font-face', '@property', '@charset', '@import', '@namespace']) {
@@ -618,123 +686,129 @@ export async function run(): Promise<void> {
       assert.ok(globalLabels.has(label), `Expected ${label} in globalStyle at-rule candidates`)
     }
     for (const label of ['@charset', '@import', '@namespace']) {
-      assert.ok(!globalLabels.has(label), `Expected ${label} to remain unavailable in a tagged template`)
+      assert.ok(
+        !globalLabels.has(label),
+        `Expected ${label} to remain unavailable in a tagged template`,
+      )
     }
   })
 
-  await runCase('keeps at-rule completions scoped to valid names and nested rule bodies', async () => {
-    const nested = await assertPropertyCompletion({
-      source: [
-        "import { styled } from 'yak'",
-        'const Panel = styled.div`',
-        '  @media (min-width: 48rem) {',
-        `    dis${cursorMarker}`,
-        '  }',
-        '`',
-      ].join('\n'),
-      expectedLabel: 'display',
-    })
-    assert.equal(nested.document.getText(completionRange(nested.item)), 'dis')
-    assert.deepEqual(
-      extensionItems(nested.items)
-        .map(completionLabel)
-        .filter((label) => label.startsWith('@') || label.startsWith(':')),
-      [],
-      'Expected only declaration-context candidates inside a media rule body',
-    )
+  await runCase(
+    'keeps at-rule completions scoped to valid names and nested rule bodies',
+    async () => {
+      const nested = await assertPropertyCompletion({
+        source: [
+          "import { styled } from 'yak'",
+          'const Panel = styled.div`',
+          '  @media (min-width: 48rem) {',
+          `    dis${cursorMarker}`,
+          '  }',
+          '`',
+        ].join('\n'),
+        expectedLabel: 'display',
+      })
+      assert.equal(nested.document.getText(completionRange(nested.item)), 'dis')
+      assert.deepEqual(
+        extensionItems(nested.items)
+          .map(completionLabel)
+          .filter((label) => label.startsWith('@') || label.startsWith(':')),
+        [],
+        'Expected only declaration-context candidates inside a media rule body',
+      )
 
-    await assertAtRuleCompletion(
-      [
-        "import { styled } from 'yak'",
-        'const Panel = styled.div`',
-        '  @media (min-width: 48rem) {',
-        `    @sup${cursorMarker}`,
-        '  }',
-        '`',
-      ].join('\n'),
-      '@supports',
-      '@sup',
-    )
+      await assertAtRuleCompletion(
+        [
+          "import { styled } from 'yak'",
+          'const Panel = styled.div`',
+          '  @media (min-width: 48rem) {',
+          `    @sup${cursorMarker}`,
+          '  }',
+          '`',
+        ].join('\n'),
+        '@supports',
+        '@sup',
+      )
 
-    const descriptor = await assertAtRuleCompletion(
-      [
-        "import { globalStyle } from 'yak'",
-        'const Panel = globalStyle`',
-        '  @property --size {',
-        `    syn${cursorMarker}`,
-        '  }',
-        '`',
-      ].join('\n'),
-      'syntax',
-      'syn',
-      'syntax: $0;',
-    )
-    assert.deepEqual(
-      extensionItems(descriptor.items)
-        .map(completionLabel)
-        .filter((label) => label.startsWith('@')),
-      [],
-      'Expected no at-rule candidates inside a descriptor block',
-    )
+      const descriptor = await assertAtRuleCompletion(
+        [
+          "import { globalStyle } from 'yak'",
+          'const Panel = globalStyle`',
+          '  @property --size {',
+          `    syn${cursorMarker}`,
+          '  }',
+          '`',
+        ].join('\n'),
+        'syntax',
+        'syn',
+        'syntax: $0;',
+      )
+      assert.deepEqual(
+        extensionItems(descriptor.items)
+          .map(completionLabel)
+          .filter((label) => label.startsWith('@')),
+        [],
+        'Expected no at-rule candidates inside a descriptor block',
+      )
 
-    const fontFace = await assertAtRuleCompletion(
-      [
-        "import { globalStyle } from 'yak'",
-        'const Panel = globalStyle`',
-        '  @font-face {',
-        `    font-f${cursorMarker}`,
-        '  }',
-        '`',
-      ].join('\n'),
-      'font-family',
-      'font-f',
-      'font-family: $0;',
-    )
-    assert.deepEqual(
-      extensionItems(fontFace.items)
-        .map(completionLabel)
-        .filter((label) => label.startsWith('@')),
-      [],
-      'Expected no at-rule candidates inside a font-face descriptor block',
-    )
+      const fontFace = await assertAtRuleCompletion(
+        [
+          "import { globalStyle } from 'yak'",
+          'const Panel = globalStyle`',
+          '  @font-face {',
+          `    font-f${cursorMarker}`,
+          '  }',
+          '`',
+        ].join('\n'),
+        'font-family',
+        'font-f',
+        'font-family: $0;',
+      )
+      assert.deepEqual(
+        extensionItems(fontFace.items)
+          .map(completionLabel)
+          .filter((label) => label.startsWith('@')),
+        [],
+        'Expected no at-rule candidates inside a font-face descriptor block',
+      )
 
-    for (const source of [
-      atRuleSource('color: @'),
-      atRuleSource('/* @med'),
-      atRuleSource('content: "@med'),
-      atRuleSource('background: url(@med'),
-      [
-        "import { styled } from 'yak'",
-        'const Panel = styled.div`',
-        '  @property --size {',
-        `    @med${cursorMarker}`,
-        '  }',
-        '`',
-      ].join('\n'),
-      [
-        "import { styled } from 'yak'",
-        'const Panel = styled.div`',
-        '  @property --size {',
-        `    syn${cursorMarker}`,
-        '  }',
-        '`',
-      ].join('\n'),
-      [
-        "import { styled } from 'yak'",
-        'const Panel = styled.div`',
-        `  color: \${value.${cursorMarker}accent};`,
-        '`',
-      ].join('\n'),
-      [
-        "import { keyframes } from 'yak'",
-        'const spin = keyframes`',
-        `  @med${cursorMarker}`,
-        '`',
-      ].join('\n'),
-    ]) {
-      await assertNoAtRuleCompletion(source)
-    }
-  })
+      for (const source of [
+        atRuleSource('color: @'),
+        atRuleSource('/* @med'),
+        atRuleSource('content: "@med'),
+        atRuleSource('background: url(@med'),
+        [
+          "import { styled } from 'yak'",
+          'const Panel = styled.div`',
+          '  @property --size {',
+          `    @med${cursorMarker}`,
+          '  }',
+          '`',
+        ].join('\n'),
+        [
+          "import { styled } from 'yak'",
+          'const Panel = styled.div`',
+          '  @property --size {',
+          `    syn${cursorMarker}`,
+          '  }',
+          '`',
+        ].join('\n'),
+        [
+          "import { styled } from 'yak'",
+          'const Panel = styled.div`',
+          `  color: \${value.${cursorMarker}accent};`,
+          '`',
+        ].join('\n'),
+        [
+          "import { keyframes } from 'yak'",
+          'const spin = keyframes`',
+          `  @med${cursorMarker}`,
+          '`',
+        ].join('\n'),
+      ]) {
+        await assertNoAtRuleCompletion(source)
+      }
+    },
+  )
 
   await runCase('rejects type-only, locally shadowed, and dynamic yak tags', async () => {
     for (const source of [
@@ -779,10 +853,19 @@ export async function run(): Promise<void> {
     })
 
     const initialItems = await completionItemsAt(document, cursorOffset)
-    assert.ok(findExtensionItem(initialItems, 'color'), 'Expected a yak completion before removing the import')
+    assert.ok(
+      findExtensionItem(initialItems, 'color'),
+      'Expected a yak completion before removing the import',
+    )
 
-    const editor = await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true })
-    const importRange = new vscode.Range(document.positionAt(0), document.positionAt(document.getText().indexOf('\n') + 1))
+    const editor = await vscode.window.showTextDocument(document, {
+      preview: false,
+      preserveFocus: true,
+    })
+    const importRange = new vscode.Range(
+      document.positionAt(0),
+      document.positionAt(document.getText().indexOf('\n') + 1),
+    )
 
     await editor.edit((edit) => edit.replace(importRange, "import { css } from 'yak'\n"))
 
@@ -794,237 +877,369 @@ export async function run(): Promise<void> {
     )
   })
 
-  await runCase('provides mapped CSS hover documentation and excludes unsupported positions', async () => {
-    const provider = await createDirectHoverProvider(extension.extensionPath)
-    const requestFor = async (css: string, tag = 'styled.div', importStatement = "import { styled } from 'yak'") => {
-      const request = await directProviderRequest(styledSource(css, tag, importStatement))
+  await runCase(
+    'provides mapped CSS hover documentation and excludes unsupported positions',
+    async () => {
+      const provider = await createDirectHoverProvider(extension.extensionPath)
+      const requestFor = async (
+        css: string,
+        tag = 'styled.div',
+        importStatement = "import { styled } from 'yak'",
+      ) => {
+        const request = await directProviderRequest(styledSource(css, tag, importStatement))
 
-      return {
-        ...request,
-        hover: provider.provideHover(request.document, request.position, neverCancelledToken),
-      }
-    }
-
-    const property = await requestFor('display/*cursor*/: grid;')
-    assert.ok(property.hover, 'Expected a property hover')
-    assert.ok(property.hover.contents[0] instanceof vscode.MarkdownString, 'Expected CSS Markdown to become a VS Code MarkdownString')
-    assert.match(hoverContentText(property.hover), /MDN Reference/)
-    assert.equal(property.document.getText(hoverRange(property.hover)), 'display: grid')
-
-    const value = await requestFor('display: gr/*cursor*/id;')
-    assert.ok(value.hover, 'Expected a value hover')
-    assert.match(hoverContentText(value.hover), /grid formatting context/)
-    assert.equal(value.document.getText(hoverRange(value.hover)), 'grid')
-
-    const functionHover = await requestFor('transform: rot/*cursor*/ate(45deg);')
-    assert.ok(functionHover.hover, 'Expected a function hover')
-    assert.match(hoverContentText(functionHover.hover), /2D rotation/)
-    assert.equal(functionHover.document.getText(hoverRange(functionHover.hover)), 'rotate')
-
-    const pseudoClass = await requestFor('a:ho/*cursor*/ver { color: red; }')
-    assert.ok(pseudoClass.hover, 'Expected a pseudo-class hover')
-    assert.match(hoverContentText(pseudoClass.hover), /pointing device/)
-    assert.equal(pseudoClass.document.getText(hoverRange(pseudoClass.hover)), ':hover')
-
-    const pseudoElement = await requestFor('a::bef/*cursor*/ore { color: red; }')
-    assert.ok(pseudoElement.hover, 'Expected a pseudo-element hover')
-    assert.match(hoverContentText(pseudoElement.hover), /styleable child pseudo-element/)
-    assert.equal(pseudoElement.document.getText(hoverRange(pseudoElement.hover)), '::before')
-
-    const keyframes = await requestFor('from { op/*cursor*/acity: 0; }', 'keyframes', "import { keyframes } from 'yak'")
-    assert.ok(keyframes.hover, 'Expected a keyframes property hover')
-    assert.match(hoverContentText(keyframes.hover), /MDN Reference/)
-
-    const interpolation = await requestFor('color: ${theme./*cursor*/accent};')
-    assert.equal(interpolation.hover, undefined)
-
-    const invalid = await requestFor('@unknown/*cursor*/ rule;')
-    assert.equal(invalid.hover, undefined)
-
-    const registeredSource = styledSource('display/*cursor*/: grid;')
-    const registeredRequest = await directProviderRequest(registeredSource)
-    const registeredHovers = await registeredHoversAt(registeredRequest.document, registeredSource.indexOf(cursorMarker))
-
-    assert.ok(
-      registeredHovers.some((hover) => hoverContentText(hover).includes('MDN Reference')),
-      'Expected the activated extension to register a CSS HoverProvider',
-    )
-  })
-
-  await runCase('surfaces mapped CSS diagnostics and filters interpolation-adjacent false positives', async () => {
-    const source = [
-      "import { styled } from 'yak'",
-      'const Panel = styled.div`',
-      '  color: ${theme.accent};',
-      '  colro: red;',
-      '`',
-    ].join('\n')
-    const document = await vscode.workspace.openTextDocument({ language: 'typescriptreact', content: source })
-
-    await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true })
-    const unknownProperty = diagnosticForText(document, 'colro')
-
-    assert.ok(unknownProperty, 'Expected a mapped unknown-property diagnostic')
-    assert.equal(unknownProperty.code, 'unknownProperties')
-    assert.equal(unknownProperty.source, 'yak CSS')
-    assert.equal(diagnosticForText(document, ';'), undefined, 'Expected no empty-value diagnostic from the interpolation placeholder')
-  })
-
-  await runCase('updates diagnostics after edits, language changes, close, and configuration changes', async () => {
-    const source = [
-      "import { styled } from 'yak'",
-      'const Panel = styled.div`',
-      '  colro: red;',
-      '`',
-    ].join('\n')
-    const document = await vscode.workspace.openTextDocument({ language: 'typescriptreact', content: source })
-    const editor = await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true })
-
-    assert.ok(diagnosticForText(document, 'colro'), 'Expected initial CSS diagnostic')
-    const typoStart = document.getText().indexOf('colro')
-    await editor.edit((edit) => edit.replace(
-      new vscode.Range(document.positionAt(typoStart), document.positionAt(typoStart + 5)),
-      'color',
-    ))
-    assert.equal(diagnosticForText(document, 'color'), undefined, 'Expected diagnostics to refresh after editing CSS')
-
-    await editor.edit((edit) => edit.replace(
-      new vscode.Range(document.positionAt(typoStart), document.positionAt(typoStart + 5)),
-      'colro',
-    ))
-    assert.ok(diagnosticForText(document, 'colro'), 'Expected diagnostics to return after reintroducing the typo')
-
-    const configuration = vscode.workspace.getConfiguration('yak', document.uri)
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
-    const settingsDirectory = workspaceFolder && vscode.Uri.joinPath(workspaceFolder.uri, '.vscode')
-    const settingsFile = settingsDirectory && vscode.Uri.joinPath(settingsDirectory, 'settings.json')
-    const settingsDirectoryExisted = settingsDirectory ? await resourceExists(settingsDirectory) : true
-    const settingsFileExisted = settingsFile ? await resourceExists(settingsFile) : true
-    const previousWorkspaceValue = configuration.inspect<boolean>('css.validate')?.workspaceValue
-
-    try {
-      await configuration.update('css.validate', false, vscode.ConfigurationTarget.Workspace)
-      assert.deepEqual(diagnosticsFor(document), [], 'Expected CSS diagnostics to clear when validation is disabled')
-      await configuration.update('css.validate', true, vscode.ConfigurationTarget.Workspace)
-      assert.ok(diagnosticForText(document, 'colro'), 'Expected CSS diagnostics to return when validation is enabled')
-
-      const javascriptDocument = await vscode.languages.setTextDocumentLanguage(document, 'javascript')
-      assert.ok(diagnosticForText(javascriptDocument, 'colro'), 'Expected diagnostics after switching to another supported language')
-      const plaintextDocument = await vscode.languages.setTextDocumentLanguage(javascriptDocument, 'plaintext')
-      assert.deepEqual(diagnosticsFor(plaintextDocument), [], 'Expected diagnostics to clear after switching to an unsupported language')
-
-      const closeDocument = await vscode.workspace.openTextDocument({ language: 'typescriptreact', content: source })
-      await vscode.window.showTextDocument(closeDocument, { preview: false, preserveFocus: true })
-      assert.ok(diagnosticForText(closeDocument, 'colro'), 'Expected a CSS diagnostic before closing a supported document')
-      await vscode.commands.executeCommand('workbench.action.closeActiveEditor')
-      assert.deepEqual(diagnosticsFor(closeDocument), [], 'Expected no retained diagnostics after closing the document')
-    } finally {
-      await configuration.update('css.validate', previousWorkspaceValue, vscode.ConfigurationTarget.Workspace)
-
-      if (settingsFile && !settingsFileExisted && await resourceExists(settingsFile)) {
-        await vscode.workspace.fs.delete(settingsFile, { useTrash: false })
+        return {
+          ...request,
+          hover: provider.provideHover(request.document, request.position, neverCancelledToken),
+        }
       }
 
-      if (settingsDirectory && !settingsDirectoryExisted && await resourceExists(settingsDirectory)) {
-        await vscode.workspace.fs.delete(settingsDirectory, { recursive: false, useTrash: false })
+      const property = await requestFor('display/*cursor*/: grid;')
+      assert.ok(property.hover, 'Expected a property hover')
+      assert.ok(
+        property.hover.contents[0] instanceof vscode.MarkdownString,
+        'Expected CSS Markdown to become a VS Code MarkdownString',
+      )
+      assert.match(hoverContentText(property.hover), /MDN Reference/)
+      assert.equal(property.document.getText(hoverRange(property.hover)), 'display: grid')
+
+      const value = await requestFor('display: gr/*cursor*/id;')
+      assert.ok(value.hover, 'Expected a value hover')
+      assert.match(hoverContentText(value.hover), /grid formatting context/)
+      assert.equal(value.document.getText(hoverRange(value.hover)), 'grid')
+
+      const functionHover = await requestFor('transform: rot/*cursor*/ate(45deg);')
+      assert.ok(functionHover.hover, 'Expected a function hover')
+      assert.match(hoverContentText(functionHover.hover), /2D rotation/)
+      assert.equal(functionHover.document.getText(hoverRange(functionHover.hover)), 'rotate')
+
+      const pseudoClass = await requestFor('a:ho/*cursor*/ver { color: red; }')
+      assert.ok(pseudoClass.hover, 'Expected a pseudo-class hover')
+      assert.match(hoverContentText(pseudoClass.hover), /pointing device/)
+      assert.equal(pseudoClass.document.getText(hoverRange(pseudoClass.hover)), ':hover')
+
+      const pseudoElement = await requestFor('a::bef/*cursor*/ore { color: red; }')
+      assert.ok(pseudoElement.hover, 'Expected a pseudo-element hover')
+      assert.match(hoverContentText(pseudoElement.hover), /styleable child pseudo-element/)
+      assert.equal(pseudoElement.document.getText(hoverRange(pseudoElement.hover)), '::before')
+
+      const keyframes = await requestFor(
+        'from { op/*cursor*/acity: 0; }',
+        'keyframes',
+        "import { keyframes } from 'yak'",
+      )
+      assert.ok(keyframes.hover, 'Expected a keyframes property hover')
+      assert.match(hoverContentText(keyframes.hover), /MDN Reference/)
+
+      const interpolation = await requestFor('color: ${theme./*cursor*/accent};')
+      assert.equal(interpolation.hover, undefined)
+
+      const invalid = await requestFor('@unknown/*cursor*/ rule;')
+      assert.equal(invalid.hover, undefined)
+
+      const registeredSource = styledSource('display/*cursor*/: grid;')
+      const registeredRequest = await directProviderRequest(registeredSource)
+      const registeredHovers = await registeredHoversAt(
+        registeredRequest.document,
+        registeredSource.indexOf(cursorMarker),
+      )
+
+      assert.ok(
+        registeredHovers.some((hover) => hoverContentText(hover).includes('MDN Reference')),
+        'Expected the activated extension to register a CSS HoverProvider',
+      )
+    },
+  )
+
+  await runCase(
+    'surfaces mapped CSS diagnostics and filters interpolation-adjacent false positives',
+    async () => {
+      const source = [
+        "import { styled } from 'yak'",
+        'const Panel = styled.div`',
+        '  color: ${theme.accent};',
+        '  colro: red;',
+        '`',
+      ].join('\n')
+      const document = await vscode.workspace.openTextDocument({
+        language: 'typescriptreact',
+        content: source,
+      })
+
+      await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true })
+      const unknownProperty = diagnosticForText(document, 'colro')
+
+      assert.ok(unknownProperty, 'Expected a mapped unknown-property diagnostic')
+      assert.equal(unknownProperty.code, 'unknownProperties')
+      assert.equal(unknownProperty.source, 'yak CSS')
+      assert.equal(
+        diagnosticForText(document, ';'),
+        undefined,
+        'Expected no empty-value diagnostic from the interpolation placeholder',
+      )
+    },
+  )
+
+  await runCase(
+    'updates diagnostics after edits, language changes, close, and configuration changes',
+    async () => {
+      const source = [
+        "import { styled } from 'yak'",
+        'const Panel = styled.div`',
+        '  colro: red;',
+        '`',
+      ].join('\n')
+      const document = await vscode.workspace.openTextDocument({
+        language: 'typescriptreact',
+        content: source,
+      })
+      const editor = await vscode.window.showTextDocument(document, {
+        preview: false,
+        preserveFocus: true,
+      })
+
+      assert.ok(diagnosticForText(document, 'colro'), 'Expected initial CSS diagnostic')
+      const typoStart = document.getText().indexOf('colro')
+      await editor.edit((edit) =>
+        edit.replace(
+          new vscode.Range(document.positionAt(typoStart), document.positionAt(typoStart + 5)),
+          'color',
+        ),
+      )
+      assert.equal(
+        diagnosticForText(document, 'color'),
+        undefined,
+        'Expected diagnostics to refresh after editing CSS',
+      )
+
+      await editor.edit((edit) =>
+        edit.replace(
+          new vscode.Range(document.positionAt(typoStart), document.positionAt(typoStart + 5)),
+          'colro',
+        ),
+      )
+      assert.ok(
+        diagnosticForText(document, 'colro'),
+        'Expected diagnostics to return after reintroducing the typo',
+      )
+
+      const configuration = vscode.workspace.getConfiguration('yak', document.uri)
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
+      const settingsDirectory =
+        workspaceFolder && vscode.Uri.joinPath(workspaceFolder.uri, '.vscode')
+      const settingsFile =
+        settingsDirectory && vscode.Uri.joinPath(settingsDirectory, 'settings.json')
+      const settingsDirectoryExisted = settingsDirectory
+        ? await resourceExists(settingsDirectory)
+        : true
+      const settingsFileExisted = settingsFile ? await resourceExists(settingsFile) : true
+      const previousWorkspaceValue = configuration.inspect<boolean>('css.validate')?.workspaceValue
+
+      try {
+        await configuration.update('css.validate', false, vscode.ConfigurationTarget.Workspace)
+        assert.deepEqual(
+          diagnosticsFor(document),
+          [],
+          'Expected CSS diagnostics to clear when validation is disabled',
+        )
+        await configuration.update('css.validate', true, vscode.ConfigurationTarget.Workspace)
+        assert.ok(
+          diagnosticForText(document, 'colro'),
+          'Expected CSS diagnostics to return when validation is enabled',
+        )
+
+        const javascriptDocument = await vscode.languages.setTextDocumentLanguage(
+          document,
+          'javascript',
+        )
+        assert.ok(
+          diagnosticForText(javascriptDocument, 'colro'),
+          'Expected diagnostics after switching to another supported language',
+        )
+        const plaintextDocument = await vscode.languages.setTextDocumentLanguage(
+          javascriptDocument,
+          'plaintext',
+        )
+        assert.deepEqual(
+          diagnosticsFor(plaintextDocument),
+          [],
+          'Expected diagnostics to clear after switching to an unsupported language',
+        )
+
+        const closeDocument = await vscode.workspace.openTextDocument({
+          language: 'typescriptreact',
+          content: source,
+        })
+        await vscode.window.showTextDocument(closeDocument, { preview: false, preserveFocus: true })
+        assert.ok(
+          diagnosticForText(closeDocument, 'colro'),
+          'Expected a CSS diagnostic before closing a supported document',
+        )
+        await vscode.commands.executeCommand('workbench.action.closeActiveEditor')
+        assert.deepEqual(
+          diagnosticsFor(closeDocument),
+          [],
+          'Expected no retained diagnostics after closing the document',
+        )
+      } finally {
+        await configuration.update(
+          'css.validate',
+          previousWorkspaceValue,
+          vscode.ConfigurationTarget.Workspace,
+        )
+
+        if (settingsFile && !settingsFileExisted && (await resourceExists(settingsFile))) {
+          await vscode.workspace.fs.delete(settingsFile, { useTrash: false })
+        }
+
+        if (
+          settingsDirectory &&
+          !settingsDirectoryExisted &&
+          (await resourceExists(settingsDirectory))
+        ) {
+          await vscode.workspace.fs.delete(settingsDirectory, { recursive: false, useTrash: false })
+        }
       }
-    }
-  })
+    },
+  )
 
-  await runCase('offers a safe mapped CSS spelling quick fix and rejects interpolation fixes', async () => {
-    const source = [
-      "import { styled } from 'yak'",
-      'const Panel = styled.div`',
-      '  colro: red;',
-      '  color: ${theme.accent};',
-      '`',
-    ].join('\n')
-    const document = await vscode.workspace.openTextDocument({ language: 'typescriptreact', content: source })
-    const typo = diagnosticForText(document, 'colro')
+  await runCase(
+    'offers a safe mapped CSS spelling quick fix and rejects interpolation fixes',
+    async () => {
+      const source = [
+        "import { styled } from 'yak'",
+        'const Panel = styled.div`',
+        '  colro: red;',
+        '  color: ${theme.accent};',
+        '`',
+      ].join('\n')
+      const document = await vscode.workspace.openTextDocument({
+        language: 'typescriptreact',
+        content: source,
+      })
+      const typo = diagnosticForText(document, 'colro')
 
-    assert.ok(typo, 'Expected a CSS spelling diagnostic before requesting code actions')
-    const provider = await createDirectCodeActionProvider(extension.extensionPath)
-    const directActions = provider.provideCodeActions(document, typo.range, {
-      diagnostics: [typo],
-      only: vscode.CodeActionKind.QuickFix,
-      triggerKind: vscode.CodeActionTriggerKind.Invoke,
-    }, neverCancelledToken)
-    const directColorAction = directActions?.find((action) => action.title === "Rename to 'color'")
+      assert.ok(typo, 'Expected a CSS spelling diagnostic before requesting code actions')
+      const provider = await createDirectCodeActionProvider(extension.extensionPath)
+      const directActions = provider.provideCodeActions(
+        document,
+        typo.range,
+        {
+          diagnostics: [typo],
+          only: vscode.CodeActionKind.QuickFix,
+          triggerKind: vscode.CodeActionTriggerKind.Invoke,
+        },
+        neverCancelledToken,
+      )
+      const directColorAction = directActions?.find(
+        (action) => action.title === "Rename to 'color'",
+      )
 
-    assert.ok(directColorAction, 'Expected the direct provider to return a Rename to color quick fix')
-    assert.ok(
-      directColorAction.diagnostics?.some((diagnostic) => diagnostic.source === 'yak CSS'),
-      'Expected the direct mapped action to reference its CSS diagnostic',
-    )
+      assert.ok(
+        directColorAction,
+        'Expected the direct provider to return a Rename to color quick fix',
+      )
+      assert.ok(
+        directColorAction.diagnostics?.some((diagnostic) => diagnostic.source === 'yak CSS'),
+        'Expected the direct mapped action to reference its CSS diagnostic',
+      )
 
-    const actions = await registeredCodeActionsAt(document, typo.range)
-    const colorAction = actions.find((action) => action.title === "Rename to 'color'")
+      const actions = await registeredCodeActionsAt(document, typo.range)
+      const colorAction = actions.find((action) => action.title === "Rename to 'color'")
 
-    assert.ok(colorAction, 'Expected a mapped Rename to color quick fix')
-    const edits = workspaceEditEntries(colorAction, document)
-    assert.deepEqual(edits.map(([range, newText]) => [document.getText(range), newText]), [['colro', 'color']])
+      assert.ok(colorAction, 'Expected a mapped Rename to color quick fix')
+      const edits = workspaceEditEntries(colorAction, document)
+      assert.deepEqual(
+        edits.map(([range, newText]) => [document.getText(range), newText]),
+        [['colro', 'color']],
+      )
 
-    const interpolationOffset = source.indexOf('theme.accent')
-    const interpolationRange = new vscode.Range(
-      document.positionAt(interpolationOffset),
-      document.positionAt(interpolationOffset + 'theme.accent'.length),
-    )
-    assert.deepEqual(
-      provider.provideCodeActions(document, interpolationRange, {
-        diagnostics: [],
-        only: vscode.CodeActionKind.QuickFix,
-        triggerKind: vscode.CodeActionTriggerKind.Invoke,
-      }, neverCancelledToken),
-      [],
-      'Expected the yak CSS provider to return no action within an interpolation',
-    )
-  })
+      const interpolationOffset = source.indexOf('theme.accent')
+      const interpolationRange = new vscode.Range(
+        document.positionAt(interpolationOffset),
+        document.positionAt(interpolationOffset + 'theme.accent'.length),
+      )
+      assert.deepEqual(
+        provider.provideCodeActions(
+          document,
+          interpolationRange,
+          {
+            diagnostics: [],
+            only: vscode.CodeActionKind.QuickFix,
+            triggerKind: vscode.CodeActionTriggerKind.Invoke,
+          },
+          neverCancelledToken,
+        ),
+        [],
+        'Expected the yak CSS provider to return no action within an interpolation',
+      )
+    },
+  )
 
-  await runCase('keeps multiple CSS spelling fixes independent and skips diagnostics without fixes', async () => {
-    const source = [
-      "import { styled } from 'yak'",
-      'const Panel = styled.div`',
-      '  colro: red;',
-      '  bakground: blue;',
-      '  color: rgb(1, 2, 3;',
-      '`',
-    ].join('\n')
-    const document = await vscode.workspace.openTextDocument({ language: 'typescriptreact', content: source })
-    const colro = diagnosticForText(document, 'colro')
-    const bakground = diagnosticForText(document, 'bakground')
-    const unclosedValue = diagnosticForText(document, ';')
-    const provider = await createDirectCodeActionProvider(extension.extensionPath)
+  await runCase(
+    'keeps multiple CSS spelling fixes independent and skips diagnostics without fixes',
+    async () => {
+      const source = [
+        "import { styled } from 'yak'",
+        'const Panel = styled.div`',
+        '  colro: red;',
+        '  bakground: blue;',
+        '  color: rgb(1, 2, 3;',
+        '`',
+      ].join('\n')
+      const document = await vscode.workspace.openTextDocument({
+        language: 'typescriptreact',
+        content: source,
+      })
+      const colro = diagnosticForText(document, 'colro')
+      const bakground = diagnosticForText(document, 'bakground')
+      const unclosedValue = diagnosticForText(document, ';')
+      const provider = await createDirectCodeActionProvider(extension.extensionPath)
 
-    assert.ok(colro, 'Expected the first unknown-property diagnostic')
-    assert.ok(bakground, 'Expected the second unknown-property diagnostic')
-    assert.ok(unclosedValue, 'Expected an unclosed-value diagnostic')
+      assert.ok(colro, 'Expected the first unknown-property diagnostic')
+      assert.ok(bakground, 'Expected the second unknown-property diagnostic')
+      assert.ok(unclosedValue, 'Expected an unclosed-value diagnostic')
 
-    const colroActions = await registeredCodeActionsAt(document, colro.range)
-    const colroAction = colroActions.find((action) => action.title === "Rename to 'color'")
-    assert.ok(colroAction, 'Expected a color rename for colro')
-    assert.deepEqual(
-      workspaceEditEntries(colroAction, document).map(([range, newText]) => [document.getText(range), newText]),
-      [['colro', 'color']],
-    )
+      const colroActions = await registeredCodeActionsAt(document, colro.range)
+      const colroAction = colroActions.find((action) => action.title === "Rename to 'color'")
+      assert.ok(colroAction, 'Expected a color rename for colro')
+      assert.deepEqual(
+        workspaceEditEntries(colroAction, document).map(([range, newText]) => [
+          document.getText(range),
+          newText,
+        ]),
+        [['colro', 'color']],
+      )
 
-    const bakgroundActions = await registeredCodeActionsAt(document, bakground.range)
-    const bakgroundAction = bakgroundActions.find((action) => action.title === "Rename to 'background'")
-    assert.ok(bakgroundAction, 'Expected a background rename for bakground')
-    assert.deepEqual(
-      workspaceEditEntries(bakgroundAction, document).map(([range, newText]) => [document.getText(range), newText]),
-      [['bakground', 'background']],
-    )
+      const bakgroundActions = await registeredCodeActionsAt(document, bakground.range)
+      const bakgroundAction = bakgroundActions.find(
+        (action) => action.title === "Rename to 'background'",
+      )
+      assert.ok(bakgroundAction, 'Expected a background rename for bakground')
+      assert.deepEqual(
+        workspaceEditEntries(bakgroundAction, document).map(([range, newText]) => [
+          document.getText(range),
+          newText,
+        ]),
+        [['bakground', 'background']],
+      )
 
-    assert.deepEqual(
-      provider.provideCodeActions(document, unclosedValue.range, {
-        diagnostics: [unclosedValue],
-        only: vscode.CodeActionKind.QuickFix,
-        triggerKind: vscode.CodeActionTriggerKind.Invoke,
-      }, neverCancelledToken),
-      [],
-      'Expected the yak CSS provider to return no quick fix when CSS Language Service does not offer one',
-    )
-  })
+      assert.deepEqual(
+        provider.provideCodeActions(
+          document,
+          unclosedValue.range,
+          {
+            diagnostics: [unclosedValue],
+            only: vscode.CodeActionKind.QuickFix,
+            triggerKind: vscode.CodeActionTriggerKind.Invoke,
+          },
+          neverCancelledToken,
+        ),
+        [],
+        'Expected the yak CSS provider to return no quick fix when CSS Language Service does not offer one',
+      )
+    },
+  )
 
   await runCase('provides safe mapped CSS colors and picker presentations', async () => {
     const source = [
@@ -1039,19 +1254,21 @@ export async function run(): Promise<void> {
       '  color: ${theme.accent};',
       '`',
     ].join('\n')
-    const document = await vscode.workspace.openTextDocument({ language: 'typescriptreact', content: source })
+    const document = await vscode.workspace.openTextDocument({
+      language: 'typescriptreact',
+      content: source,
+    })
     const provider = await createDirectColorProvider(extension.extensionPath)
     const directColors = provider.provideDocumentColors(document, neverCancelledToken)
 
     assert.ok(directColors, 'Expected the direct provider to find static CSS colors')
-    assert.deepEqual(directColors.map((color) => document.getText(color.range)), [
-      '#663399',
-      'rgba(23, 107, 91, 0.5)',
-      'rebeccapurple',
-      '#fff',
-      'hsl(160 45% 26%)',
-    ])
-    const alphaColor = directColors.find((color) => document.getText(color.range) === 'rgba(23, 107, 91, 0.5)')
+    assert.deepEqual(
+      directColors.map((color) => document.getText(color.range)),
+      ['#663399', 'rgba(23, 107, 91, 0.5)', 'rebeccapurple', '#fff', 'hsl(160 45% 26%)'],
+    )
+    const alphaColor = directColors.find(
+      (color) => document.getText(color.range) === 'rgba(23, 107, 91, 0.5)',
+    )
     const hexColor = directColors.find((color) => document.getText(color.range) === '#663399')
 
     assert.ok(alphaColor, 'Expected an alpha color decoration')
@@ -1065,9 +1282,15 @@ export async function run(): Promise<void> {
     )
 
     assert.ok(directPresentations, 'Expected color picker presentations for the static hex color')
-    assert.ok(directPresentations.some((presentation) => presentation.label === 'rgb(102, 51, 153)'))
-    assert.ok(directPresentations.some((presentation) => presentation.label === 'hsl(270, 50%, 40%)'))
-    const namedPresentation = directPresentations.find((presentation) => presentation.label === 'rebeccapurple')
+    assert.ok(
+      directPresentations.some((presentation) => presentation.label === 'rgb(102, 51, 153)'),
+    )
+    assert.ok(
+      directPresentations.some((presentation) => presentation.label === 'hsl(270, 50%, 40%)'),
+    )
+    const namedPresentation = directPresentations.find(
+      (presentation) => presentation.label === 'rebeccapurple',
+    )
 
     assert.ok(namedPresentation?.textEdit, 'Expected an exact named-color presentation')
     assert.equal(document.getText(namedPresentation.textEdit.range), '#663399')
@@ -1080,11 +1303,21 @@ export async function run(): Promise<void> {
     )
 
     assert.ok(alphaPresentations, 'Expected color picker presentations for the alpha color')
-    const rgbaPresentation = alphaPresentations.find((presentation) => presentation.label === 'rgba(23, 107, 91, 0.5)')
-    const hslaPresentation = alphaPresentations.find((presentation) => presentation.label === 'hsla(169, 65%, 25%, 0.5)')
+    const rgbaPresentation = alphaPresentations.find(
+      (presentation) => presentation.label === 'rgba(23, 107, 91, 0.5)',
+    )
+    const hslaPresentation = alphaPresentations.find(
+      (presentation) => presentation.label === 'hsla(169, 65%, 25%, 0.5)',
+    )
 
-    assert.ok(rgbaPresentation?.textEdit, 'Expected an rgba picker presentation for the alpha color')
-    assert.ok(hslaPresentation?.textEdit, 'Expected an hsla picker presentation for the alpha color')
+    assert.ok(
+      rgbaPresentation?.textEdit,
+      'Expected an rgba picker presentation for the alpha color',
+    )
+    assert.ok(
+      hslaPresentation?.textEdit,
+      'Expected an hsla picker presentation for the alpha color',
+    )
     assert.equal(document.getText(rgbaPresentation.textEdit.range), 'rgba(23, 107, 91, 0.5)')
     assert.equal(document.getText(hslaPresentation.textEdit.range), 'rgba(23, 107, 91, 0.5)')
     assert.ok(!alphaPresentations.some((presentation) => presentation.label === 'rebeccapurple'))
@@ -1096,60 +1329,77 @@ export async function run(): Promise<void> {
     )
 
     assert.deepEqual(
-      provider.provideColorPresentations(new vscode.Color(1, 0, 0, 1), { document, range: commentRange }, neverCancelledToken),
+      provider.provideColorPresentations(
+        new vscode.Color(1, 0, 0, 1),
+        { document, range: commentRange },
+        neverCancelledToken,
+      ),
       [],
       'Expected no color picker presentation for a comment pseudo-color',
     )
 
     const registeredColors = await registeredDocumentColors(document)
-    const registeredHexColor = registeredColors.find((color) => document.getText(color.range) === '#663399')
+    const registeredHexColor = registeredColors.find(
+      (color) => document.getText(color.range) === '#663399',
+    )
 
-    assert.ok(registeredHexColor, 'Expected the activated extension to register a DocumentColorProvider')
+    assert.ok(
+      registeredHexColor,
+      'Expected the activated extension to register a DocumentColorProvider',
+    )
     const registeredPresentations = await registeredColorPresentations(
       document,
       registeredHexColor.color,
       registeredHexColor.range,
     )
-    const registeredNamedPresentation = registeredPresentations.find((presentation) => presentation.label === 'rebeccapurple')
+    const registeredNamedPresentation = registeredPresentations.find(
+      (presentation) => presentation.label === 'rebeccapurple',
+    )
 
-    assert.ok(registeredNamedPresentation?.textEdit, 'Expected the registered picker to offer rebeccapurple')
+    assert.ok(
+      registeredNamedPresentation?.textEdit,
+      'Expected the registered picker to offer rebeccapurple',
+    )
     assert.equal(document.getText(registeredNamedPresentation.textEdit.range), '#663399')
   })
 
-  await runCase('keeps completion ranges safe for incomplete templates and syntax errors', async () => {
-    const incompleteTemplate = await assertPropertyCompletion({
-      source: [
-        "import { styled } from 'yak'",
-        'const Panel = styled.div`',
-        `  col${cursorMarker}`,
-      ].join('\n'),
-    })
-    assertRangeWithinDocument(incompleteTemplate.document, incompleteTemplate.item)
+  await runCase(
+    'keeps completion ranges safe for incomplete templates and syntax errors',
+    async () => {
+      const incompleteTemplate = await assertPropertyCompletion({
+        source: [
+          "import { styled } from 'yak'",
+          'const Panel = styled.div`',
+          `  col${cursorMarker}`,
+        ].join('\n'),
+      })
+      assertRangeWithinDocument(incompleteTemplate.document, incompleteTemplate.item)
 
-    const malformedTsx = await assertPropertyCompletion({
-      source: [
-        "import { styled } from 'yak'",
-        'const view = <section>',
-        '  {styled.div`',
-        `    col${cursorMarker}`,
-        '  `}',
-      ].join('\n'),
-    })
-    assertRangeWithinDocument(malformedTsx.document, malformedTsx.item)
+      const malformedTsx = await assertPropertyCompletion({
+        source: [
+          "import { styled } from 'yak'",
+          'const view = <section>',
+          '  {styled.div`',
+          `    col${cursorMarker}`,
+          '  `}',
+        ].join('\n'),
+      })
+      assertRangeWithinDocument(malformedTsx.document, malformedTsx.item)
 
-    const interpolation = await completionItems({
-      source: [
-        "import { styled } from 'yak'",
-        'const Panel = styled.div`',
-        `  color: \${({ theme }) => theme.${cursorMarker}`,
-      ].join('\n'),
-    })
-    assert.equal(
-      extensionItems(interpolation.items).length,
-      0,
-      `Expected interpolation completion to remain with the host language service; received ${extensionItems(interpolation.items).map(completionLabel).join(', ')}`,
-    )
-  })
+      const interpolation = await completionItems({
+        source: [
+          "import { styled } from 'yak'",
+          'const Panel = styled.div`',
+          `  color: \${({ theme }) => theme.${cursorMarker}`,
+        ].join('\n'),
+      })
+      assert.equal(
+        extensionItems(interpolation.items).length,
+        0,
+        `Expected interpolation completion to remain with the host language service; received ${extensionItems(interpolation.items).map(completionLabel).join(', ')}`,
+      )
+    },
+  )
 
   await runCase('works for unsaved and virtual read-only remote-style documents', async () => {
     const unsaved = await assertPropertyCompletion({ source: styledSource() })
@@ -1188,8 +1438,14 @@ export async function run(): Promise<void> {
       '  dis',
       '`',
     ].join('\n')
-    const document = await vscode.workspace.openTextDocument({ language: 'typescriptreact', content: source })
-    const editor = await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true })
+    const document = await vscode.workspace.openTextDocument({
+      language: 'typescriptreact',
+      content: source,
+    })
+    const editor = await vscode.window.showTextDocument(document, {
+      preview: false,
+      preserveFocus: true,
+    })
     const colorOffset = source.indexOf('col') + 'col'.length
     const displayOffset = source.indexOf('dis') + 'dis'.length
     const provider = await createDirectProvider(extension.extensionPath)
@@ -1199,16 +1455,18 @@ export async function run(): Promise<void> {
       new vscode.Selection(document.positionAt(displayOffset), document.positionAt(displayOffset)),
     ]
 
-    const colorItems = provider.provideCompletionItems(
-      document,
-      document.positionAt(colorOffset),
-      neverCancelledToken,
-    )?.items ?? []
-    const displayItems = provider.provideCompletionItems(
-      document,
-      document.positionAt(displayOffset),
-      neverCancelledToken,
-    )?.items ?? []
+    const colorItems =
+      provider.provideCompletionItems(
+        document,
+        document.positionAt(colorOffset),
+        neverCancelledToken,
+      )?.items ?? []
+    const displayItems =
+      provider.provideCompletionItems(
+        document,
+        document.positionAt(displayOffset),
+        neverCancelledToken,
+      )?.items ?? []
     const color = findExtensionItem(colorItems, 'color')
     const display = findExtensionItem(displayItems, 'display')
 
@@ -1225,59 +1483,83 @@ export async function run(): Promise<void> {
       language: 'typescriptreact',
       content: source.replace(cursorMarker, ''),
     })
-    const editor = await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true })
+    const editor = await vscode.window.showTextDocument(document, {
+      preview: false,
+      preserveFocus: true,
+    })
     const provider = await createDirectProvider(extension.extensionPath)
     const propertyStart = document.getText().indexOf('col')
     let prefix = 'col'
 
     for (const nextPrefix of ['c', 'co', 'col', 'colo', 'col']) {
-      await editor.edit((edit) => edit.replace(
-        new vscode.Range(
-          document.positionAt(propertyStart),
-          document.positionAt(propertyStart + prefix.length),
+      await editor.edit((edit) =>
+        edit.replace(
+          new vscode.Range(
+            document.positionAt(propertyStart),
+            document.positionAt(propertyStart + prefix.length),
+          ),
+          nextPrefix,
         ),
-        nextPrefix,
-      ))
+      )
       prefix = nextPrefix
-      const items = provider.provideCompletionItems(
-        document,
-        document.positionAt(propertyStart + prefix.length),
-        neverCancelledToken,
-      )?.items ?? []
+      const items =
+        provider.provideCompletionItems(
+          document,
+          document.positionAt(propertyStart + prefix.length),
+          neverCancelledToken,
+        )?.items ?? []
       const color = findExtensionItem(items, 'color')
 
       assert.ok(color, `Expected color completion after rapidly editing to ${prefix}`)
       assert.equal(document.getText(completionRange(color)), prefix)
     }
 
-    await editor.edit((edit) => edit.replace(
-      new vscode.Range(document.positionAt(propertyStart), document.positionAt(propertyStart + prefix.length)),
-      'display: g',
-    ))
+    await editor.edit((edit) =>
+      edit.replace(
+        new vscode.Range(
+          document.positionAt(propertyStart),
+          document.positionAt(propertyStart + prefix.length),
+        ),
+        'display: g',
+      ),
+    )
     const displayValueOffset = propertyStart + 'display: g'.length
-    let items = provider.provideCompletionItems(
-      document,
-      document.positionAt(displayValueOffset),
-      neverCancelledToken,
-    )?.items ?? []
+    let items =
+      provider.provideCompletionItems(
+        document,
+        document.positionAt(displayValueOffset),
+        neverCancelledToken,
+      )?.items ?? []
 
-    assert.ok(findExtensionItem(items, 'grid'), 'Expected grid completion after editing the declaration value')
+    assert.ok(
+      findExtensionItem(items, 'grid'),
+      'Expected grid completion after editing the declaration value',
+    )
     await vscode.commands.executeCommand('undo')
-    assert.equal(document.getText().indexOf('col'), propertyStart, 'Expected undo to restore the property prefix')
-    items = provider.provideCompletionItems(
-      document,
-      document.positionAt(initialOffset),
-      neverCancelledToken,
-    )?.items ?? []
+    assert.equal(
+      document.getText().indexOf('col'),
+      propertyStart,
+      'Expected undo to restore the property prefix',
+    )
+    items =
+      provider.provideCompletionItems(
+        document,
+        document.positionAt(initialOffset),
+        neverCancelledToken,
+      )?.items ?? []
     assert.ok(findExtensionItem(items, 'color'), 'Expected color completion after undo')
 
     await vscode.commands.executeCommand('redo')
-    assert.ok(document.getText().includes('display: g'), 'Expected redo to restore the declaration value')
-    items = provider.provideCompletionItems(
-      document,
-      document.positionAt(displayValueOffset),
-      neverCancelledToken,
-    )?.items ?? []
+    assert.ok(
+      document.getText().includes('display: g'),
+      'Expected redo to restore the declaration value',
+    )
+    items =
+      provider.provideCompletionItems(
+        document,
+        document.positionAt(displayValueOffset),
+        neverCancelledToken,
+      )?.items ?? []
     assert.ok(findExtensionItem(items, 'grid'), 'Expected grid completion after redo')
   })
 
@@ -1297,7 +1579,11 @@ export async function run(): Promise<void> {
       'Expected a request cancelled after CSS computation to discard stale items',
     )
     assert.equal(
-      provider.provideCompletionItems(atRuleRequest.document, atRuleRequest.position, cancellationToken(2)),
+      provider.provideCompletionItems(
+        atRuleRequest.document,
+        atRuleRequest.position,
+        cancellationToken(2),
+      ),
       undefined,
       'Expected an at-rule request cancelled after CSS computation to discard stale items',
     )
@@ -1310,11 +1596,18 @@ export async function run(): Promise<void> {
         return {}
       },
     }
-    const cancellableProvider = await createDirectProvider(extension.extensionPath, cancelsDuringCssCompletion)
+    const cancellableProvider = await createDirectProvider(
+      extension.extensionPath,
+      cancelsDuringCssCompletion,
+    )
 
     try {
       assert.equal(
-        cancellableProvider.provideCompletionItems(request.document, request.position, cancellationSource.token),
+        cancellableProvider.provideCompletionItems(
+          request.document,
+          request.position,
+          cancellationSource.token,
+        ),
         undefined,
         'Expected a real cancellation token to discard completion after CSS work begins',
       )
@@ -1325,45 +1618,45 @@ export async function run(): Promise<void> {
 
   await runCase('degrades safely when CSS completion responses are malformed', async () => {
     const malformedService: CssCompletionService = {
-      doComplete: () => ({
-        items: [
-          undefined,
-          { label: 42 },
-          { label: 'unsafe', textEdit: { newText: 'unsafe', range: null } },
-          { label: 'safe' },
-        ],
-      } as unknown as CssCompletionList),
+      doComplete: () =>
+        ({
+          items: [
+            undefined,
+            { label: 42 },
+            { label: 'unsafe', textEdit: { newText: 'unsafe', range: null } },
+            { label: 'safe' },
+          ],
+        }) as unknown as CssCompletionList,
       parseStylesheet: () => ({}),
     }
     const provider = await createDirectProvider(extension.extensionPath, malformedService)
     const request = await directProviderRequest(styledSource())
-    const items = provider.provideCompletionItems(
-      request.document,
-      request.position,
-      neverCancelledToken,
-    )?.items ?? []
+    const items =
+      provider.provideCompletionItems(request.document, request.position, neverCancelledToken)
+        ?.items ?? []
 
     assert.deepEqual(extensionItems(items).map(completionLabel), ['safe'])
   })
 
-  await runCase('degrades safely when corrupt CSS custom data throws during completion', async () => {
-    const corruptCustomData = {
-      properties: [{ name: '--broken', values: [{ name: null }] }],
-      version: 1.1,
-    } as unknown as CSSDataV1
-    const corruptDataService = getCSSLanguageService({
-      customDataProviders: [newCSSDataProvider(corruptCustomData)],
-    })
-    const provider = await createDirectProvider(extension.extensionPath, corruptDataService)
-    const request = await directProviderRequest(styledSource('--broken: '))
-    const items = provider.provideCompletionItems(
-      request.document,
-      request.position,
-      neverCancelledToken,
-    )?.items ?? []
+  await runCase(
+    'degrades safely when corrupt CSS custom data throws during completion',
+    async () => {
+      const corruptCustomData = {
+        properties: [{ name: '--broken', values: [{ name: null }] }],
+        version: 1.1,
+      } as unknown as CSSDataV1
+      const corruptDataService = getCSSLanguageService({
+        customDataProviders: [newCSSDataProvider(corruptCustomData)],
+      })
+      const provider = await createDirectProvider(extension.extensionPath, corruptDataService)
+      const request = await directProviderRequest(styledSource('--broken: '))
+      const items =
+        provider.provideCompletionItems(request.document, request.position, neverCancelledToken)
+          ?.items ?? []
 
-    assert.deepEqual(extensionItems(items), [])
-  })
+      assert.deepEqual(extensionItems(items), [])
+    },
+  )
 
   await runCase('keeps completion latency within the defined budgets', async () => {
     const provider = await createDirectProvider(extension.extensionPath)
@@ -1376,7 +1669,10 @@ export async function run(): Promise<void> {
     )
     let elapsedMilliseconds = performance.now() - startedAt
 
-    assert.ok(result?.items.some((item) => completionLabel(item) === 'color'), 'Expected color for a single-character request')
+    assert.ok(
+      result?.items.some((item) => completionLabel(item) === 'color'),
+      'Expected color for a single-character request',
+    )
     assert.ok(
       elapsedMilliseconds < completionLatencyBudgetMilliseconds.singleCharacter,
       `Expected single-character completion under ${completionLatencyBudgetMilliseconds.singleCharacter}ms; took ${elapsedMilliseconds.toFixed(1)}ms`,
@@ -1397,7 +1693,10 @@ export async function run(): Promise<void> {
     )
     elapsedMilliseconds = performance.now() - startedAt
 
-    assert.ok(findExtensionItem(manualList?.items ?? [], 'color'), 'Expected color from manual completion')
+    assert.ok(
+      findExtensionItem(manualList?.items ?? [], 'color'),
+      'Expected color from manual completion',
+    )
     assert.ok(
       elapsedMilliseconds < completionLatencyBudgetMilliseconds.manualTrigger,
       `Expected manual completion under ${completionLatencyBudgetMilliseconds.manualTrigger}ms; took ${elapsedMilliseconds.toFixed(1)}ms`,
@@ -1408,20 +1707,25 @@ export async function run(): Promise<void> {
       language: 'typescriptreact',
       content: continuousSource.replace(cursorMarker, ''),
     })
-    const continuousEditor = await vscode.window.showTextDocument(continuousDocument, { preview: false, preserveFocus: true })
+    const continuousEditor = await vscode.window.showTextDocument(continuousDocument, {
+      preview: false,
+      preserveFocus: true,
+    })
     const continuousPrefixStart = continuousDocument.getText().lastIndexOf('  c') + 2
     let continuousPrefix = 'c'
 
     startedAt = performance.now()
     for (const nextPrefix of ['c', 'co', 'col', 'colo', 'color']) {
       if (nextPrefix !== continuousPrefix) {
-        await continuousEditor.edit((edit) => edit.replace(
-          new vscode.Range(
-            continuousDocument.positionAt(continuousPrefixStart),
-            continuousDocument.positionAt(continuousPrefixStart + continuousPrefix.length),
+        await continuousEditor.edit((edit) =>
+          edit.replace(
+            new vscode.Range(
+              continuousDocument.positionAt(continuousPrefixStart),
+              continuousDocument.positionAt(continuousPrefixStart + continuousPrefix.length),
+            ),
+            nextPrefix,
           ),
-          nextPrefix,
-        ))
+        )
         continuousPrefix = nextPrefix
       }
 
@@ -1430,7 +1734,10 @@ export async function run(): Promise<void> {
         continuousDocument.positionAt(continuousPrefixStart + continuousPrefix.length),
         neverCancelledToken,
       )
-      assert.ok(result?.items.some((item) => completionLabel(item) === 'color'), `Expected color during continuous input at ${continuousPrefix}`)
+      assert.ok(
+        result?.items.some((item) => completionLabel(item) === 'color'),
+        `Expected color during continuous input at ${continuousPrefix}`,
+      )
     }
     elapsedMilliseconds = performance.now() - startedAt
 
@@ -1441,17 +1748,27 @@ export async function run(): Promise<void> {
 
     const largeSource = [
       "import { styled } from 'yak'",
-      ...Array.from({ length: largeDocumentTemplateCount }, (_, index) => `const Panel${index} = styled.div\`color: red;\``),
+      ...Array.from(
+        { length: largeDocumentTemplateCount },
+        (_, index) => `const Panel${index} = styled.div\`color: red;\``,
+      ),
       'const Current = styled.div`',
       `  col${cursorMarker}`,
       '`',
     ].join('\n')
     const largeRequest = await directProviderRequest(largeSource)
     startedAt = performance.now()
-    result = provider.provideCompletionItems(largeRequest.document, largeRequest.position, neverCancelledToken)
+    result = provider.provideCompletionItems(
+      largeRequest.document,
+      largeRequest.position,
+      neverCancelledToken,
+    )
     elapsedMilliseconds = performance.now() - startedAt
 
-    assert.ok(result?.items.some((item) => completionLabel(item) === 'color'), 'Expected color in a large document')
+    assert.ok(
+      result?.items.some((item) => completionLabel(item) === 'color'),
+      'Expected color in a large document',
+    )
     assert.ok(
       elapsedMilliseconds < completionLatencyBudgetMilliseconds.largeDocument,
       `Expected completion across ${largeDocumentTemplateCount} templates under ${completionLatencyBudgetMilliseconds.largeDocument}ms; took ${elapsedMilliseconds.toFixed(1)}ms`,

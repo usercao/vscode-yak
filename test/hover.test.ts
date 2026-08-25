@@ -1,6 +1,7 @@
+import { describe, expect, it } from 'vitest'
 import { getCSSLanguageService, type LanguageService } from 'vscode-css-languageservice'
 import { TextDocument } from 'vscode-languageserver-textdocument'
-import { describe, expect, it } from 'vitest'
+
 import { getMappedCssHover, type VirtualCssDocument } from '../src/hover'
 import { createVirtualCssText, findTemplate, type Template } from '../src/template'
 
@@ -22,7 +23,12 @@ function hoverAtCursor(sourceWithCursor: string) {
   }
 
   return {
-    hover: getMappedCssHover(cssLanguageService, cursorOffset, template, createVirtualDocument(source, template)),
+    hover: getMappedCssHover(
+      cssLanguageService,
+      cursorOffset,
+      template,
+      createVirtualDocument(source, template),
+    ),
     source,
     template,
   }
@@ -40,12 +46,7 @@ function createVirtualDocument(source: string, template: Template): VirtualCssDo
 }
 
 function styledSource(css: string): string {
-  return [
-    "import { styled } from 'yak'",
-    'const Panel = styled.div`',
-    `  ${css}`,
-    '`',
-  ].join('\n')
+  return ["import { styled } from 'yak'", 'const Panel = styled.div`', `  ${css}`, '`'].join('\n')
 }
 
 function hoverMarkdownValue(hover: ReturnType<typeof hoverAtCursor>['hover']): string | undefined {
@@ -65,7 +66,9 @@ describe('yak CSS hover', () => {
 
     expect(hoverMarkdownValue(result.hover)).toContain('MDN Reference')
     expect(hoverMarkdownValue(result.hover)).toContain('display')
-    expect(result.source.slice(result.hover?.range.start, result.hover?.range.end)).toBe('display: grid')
+    expect(result.source.slice(result.hover?.range.start, result.hover?.range.end)).toBe(
+      'display: grid',
+    )
   })
 
   it('returns dedicated CSS data documentation for static values and functions', () => {
@@ -87,22 +90,26 @@ describe('yak CSS hover', () => {
   })
 
   it('returns property hover inside keyframes but not for keyframe selectors', () => {
-    const property = hoverAtCursor([
-      "import { keyframes } from 'yak'",
-      'const fade = keyframes`',
-      '  from {',
-      '    op/*cursor*/acity: 0;',
-      '  }',
-      '`',
-    ].join('\n')).hover
-    const keyframeSelector = hoverAtCursor([
-      "import { keyframes } from 'yak'",
-      'const fade = keyframes`',
-      '  fr/*cursor*/om {',
-      '    opacity: 0;',
-      '  }',
-      '`',
-    ].join('\n')).hover
+    const property = hoverAtCursor(
+      [
+        "import { keyframes } from 'yak'",
+        'const fade = keyframes`',
+        '  from {',
+        '    op/*cursor*/acity: 0;',
+        '  }',
+        '`',
+      ].join('\n'),
+    ).hover
+    const keyframeSelector = hoverAtCursor(
+      [
+        "import { keyframes } from 'yak'",
+        'const fade = keyframes`',
+        '  fr/*cursor*/om {',
+        '    opacity: 0;',
+        '  }',
+        '`',
+      ].join('\n'),
+    ).hover
 
     expect(hoverMarkdownValue(property)).toContain('MDN Reference')
     expect(keyframeSelector).toBeUndefined()

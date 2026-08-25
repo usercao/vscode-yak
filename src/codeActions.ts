@@ -4,8 +4,9 @@ import type {
   TextEdit as CssTextEdit,
   WorkspaceEdit as CssWorkspaceEdit,
 } from 'vscode-css-languageservice'
-import type { VirtualCssDocument } from './hover'
+
 import { mapVirtualCssRangeToTemplateOffsets } from './diagnostics'
+import type { VirtualCssDocument } from './hover'
 import type { Template, OffsetRange } from './template'
 
 export interface MappedCssTextEdit {
@@ -92,7 +93,12 @@ function isVirtualTextDocumentEdit(
   change: unknown,
   virtualCss: VirtualCssDocument,
 ): change is { edits: CssTextEdit[]; textDocument: { uri: string; version: number } } {
-  if (!change || typeof change !== 'object' || !('edits' in change) || !('textDocument' in change)) {
+  if (
+    !change ||
+    typeof change !== 'object' ||
+    !('edits' in change) ||
+    !('textDocument' in change)
+  ) {
     return false
   }
 
@@ -101,9 +107,11 @@ function isVirtualTextDocumentEdit(
     textDocument?: { uri?: unknown; version?: unknown }
   }
 
-  return Array.isArray(textDocumentEdit.edits)
-    && textDocumentEdit.textDocument?.uri === virtualCss.document.uri
-    && textDocumentEdit.textDocument.version === virtualCss.document.version
+  return (
+    Array.isArray(textDocumentEdit.edits) &&
+    textDocumentEdit.textDocument?.uri === virtualCss.document.uri &&
+    textDocumentEdit.textDocument.version === virtualCss.document.version
+  )
 }
 
 function mapVirtualCssTextEdit(
@@ -112,9 +120,9 @@ function mapVirtualCssTextEdit(
   virtualCss: VirtualCssDocument,
 ): MappedCssTextEdit | undefined {
   if (
-    !isValidVirtualRange(edit.range, virtualCss)
-    || edit.range.start.line !== edit.range.end.line
-    || /[\r\n]/.test(edit.newText)
+    !isValidVirtualRange(edit.range, virtualCss) ||
+    edit.range.start.line !== edit.range.end.line ||
+    /[\r\n]/.test(edit.newText)
   ) {
     return undefined
   }
@@ -128,9 +136,11 @@ function isValidVirtualRange(range: CssRange, virtualCss: VirtualCssDocument) {
   const start = virtualCss.document.offsetAt(range.start)
   const end = virtualCss.document.offsetAt(range.end)
 
-  return start < end
-    && isExactVirtualPosition(range.start, start, virtualCss)
-    && isExactVirtualPosition(range.end, end, virtualCss)
+  return (
+    start < end &&
+    isExactVirtualPosition(range.start, start, virtualCss) &&
+    isExactVirtualPosition(range.end, end, virtualCss)
+  )
 }
 
 function isExactVirtualPosition(

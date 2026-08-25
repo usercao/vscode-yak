@@ -211,14 +211,13 @@ export function findTemplate(
   return analysis ? findTemplateInAnalysis(source, cursorOffset, analysis) : undefined
 }
 
-function matchesDocument(
-  analysis: CachedTemplateAnalysis,
-  document: TemplateDocument,
-) {
-  return analysis.version === document.version
-    && analysis.languageId === document.languageId
-    && analysis.fileName === document.fileName
-    && analysis.sourceFile.text === document.source
+function matchesDocument(analysis: CachedTemplateAnalysis, document: TemplateDocument) {
+  return (
+    analysis.version === document.version &&
+    analysis.languageId === document.languageId &&
+    analysis.fileName === document.fileName &&
+    analysis.sourceFile.text === document.source
+  )
 }
 
 function createTemplateAnalysis(
@@ -227,7 +226,13 @@ function createTemplateAnalysis(
   fileName: string,
   version: number,
 ): CachedTemplateAnalysis {
-  const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, toScriptKind(languageId))
+  const sourceFile = ts.createSourceFile(
+    fileName,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    toScriptKind(languageId),
+  )
   const checker = createTypeChecker(sourceFile, fileName)
   const bindings = collectTemplateBindings(sourceFile, checker)
   const taggedTemplates: TaggedTemplate[] = []
@@ -278,9 +283,19 @@ function findTemplateInAnalysis(
   let closestTemplate: Template | undefined
 
   for (const taggedTemplate of analysis.taggedTemplates) {
-    const template = createTemplate(source, analysis.sourceFile, taggedTemplate.node, taggedTemplate.tag, cursorOffset)
+    const template = createTemplate(
+      source,
+      analysis.sourceFile,
+      taggedTemplate.node,
+      taggedTemplate.tag,
+      cursorOffset,
+    )
 
-    if (template && (!closestTemplate || template.bodyEnd - template.bodyStart < closestTemplate.bodyEnd - closestTemplate.bodyStart)) {
+    if (
+      template &&
+      (!closestTemplate ||
+        template.bodyEnd - template.bodyStart < closestTemplate.bodyEnd - closestTemplate.bodyStart)
+    ) {
       closestTemplate = template
     }
   }
@@ -338,7 +353,9 @@ export function maskInterpolations(templateBody: string, interpolations: readonl
 
   for (const interpolation of interpolations) {
     maskedBody += templateBody.slice(offset, interpolation.start)
-    maskedBody += templateBody.slice(interpolation.start, interpolation.end).replace(/[^\r\n]/g, ' ')
+    maskedBody += templateBody
+      .slice(interpolation.start, interpolation.end)
+      .replace(/[^\r\n]/g, ' ')
     offset = interpolation.end
   }
 
@@ -415,8 +432,8 @@ export function getAtRuleCompletionContext(
 
   if (nameMatch) {
     if (
-      template.tag === 'keyframes'
-      || lexicalState.blocks.some((block) => block.kind === 'descriptor' || block.kind === 'keyframes')
+      template.tag === 'keyframes' ||
+      lexicalState.blocks.some((block) => block.kind === 'descriptor' || block.kind === 'keyframes')
     ) {
       return { kind: 'blocked' }
     }
@@ -499,7 +516,8 @@ function getCssLexicalState(text: string, endOffset: number) {
     }
 
     if (character === '(') {
-      const functionName = /([-_a-zA-Z][-_a-zA-Z0-9]*)\s*$/.exec(statement)?.[1]?.toLowerCase() ?? ''
+      const functionName =
+        /([-_a-zA-Z][-_a-zA-Z0-9]*)\s*$/.exec(statement)?.[1]?.toLowerCase() ?? ''
       parentheses.push(functionName)
       statement += character
       continue
@@ -558,7 +576,9 @@ function createTemplate(
   const templateStart = taggedTemplate.template.getStart(sourceFile)
   const bodyStart = templateStart + 1
   const hasClosingBacktick = source[taggedTemplate.template.end - 1] === '`'
-  const templateEnd = hasClosingBacktick ? taggedTemplate.template.end - 1 : taggedTemplate.template.end
+  const templateEnd = hasClosingBacktick
+    ? taggedTemplate.template.end - 1
+    : taggedTemplate.template.end
 
   if (cursorOffset !== undefined && (cursorOffset < bodyStart || cursorOffset > templateEnd)) {
     return undefined
@@ -574,7 +594,10 @@ function createTemplate(
   if (cursorOffset !== undefined) {
     const cursorInBody = cursorOffset - bodyStart
 
-    if (scannedTemplate.unterminatedInterpolationStart !== undefined && cursorInBody >= scannedTemplate.unterminatedInterpolationStart) {
+    if (
+      scannedTemplate.unterminatedInterpolationStart !== undefined &&
+      cursorInBody >= scannedTemplate.unterminatedInterpolationStart
+    ) {
       return undefined
     }
 
@@ -598,7 +621,11 @@ function collectTemplateBindings(sourceFile: ts.SourceFile, checker: ts.TypeChec
   const bindings = new Map<ts.Symbol, TemplateBinding>()
 
   for (const statement of sourceFile.statements) {
-    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || statement.moduleSpecifier.text !== 'yak') {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      statement.moduleSpecifier.text !== 'yak'
+    ) {
       continue
     }
 
@@ -728,7 +755,13 @@ function getTagPath(node: ts.Node): TagPath | undefined {
     return path
   }
 
-  if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isTypeAssertionExpression(node) || ts.isNonNullExpression(node) || ts.isSatisfiesExpression(node)) {
+  if (
+    ts.isParenthesizedExpression(node) ||
+    ts.isAsExpression(node) ||
+    ts.isTypeAssertionExpression(node) ||
+    ts.isNonNullExpression(node) ||
+    ts.isSatisfiesExpression(node)
+  ) {
     return getTagPath(node.expression)
   }
 
@@ -768,8 +801,10 @@ function createTypeChecker(sourceFile: ts.SourceFile, fileName: string) {
   const host = ts.createCompilerHost(options, true)
 
   host.fileExists = (requestedFileName) => requestedFileName === fileName
-  host.getSourceFile = (requestedFileName) => requestedFileName === fileName ? sourceFile : undefined
-  host.readFile = (requestedFileName) => requestedFileName === fileName ? sourceFile.text : undefined
+  host.getSourceFile = (requestedFileName) =>
+    requestedFileName === fileName ? sourceFile : undefined
+  host.readFile = (requestedFileName) =>
+    requestedFileName === fileName ? sourceFile.text : undefined
 
   return ts.createProgram({ rootNames: [fileName], options, host }).getTypeChecker()
 }

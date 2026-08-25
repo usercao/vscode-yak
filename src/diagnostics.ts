@@ -3,12 +3,9 @@ import type {
   LanguageService,
   Range as CssRange,
 } from 'vscode-css-languageservice'
+
 import type { VirtualCssDocument } from './hover'
-import {
-  mapVirtualRangeToSourceOffsets,
-  type Template,
-  type OffsetRange,
-} from './template'
+import { mapVirtualRangeToSourceOffsets, type Template, type OffsetRange } from './template'
 
 export interface MappedCssDiagnostic {
   diagnostic: CssDiagnostic
@@ -22,12 +19,16 @@ export function getMappedCssDiagnostics(
 ): MappedCssDiagnostic[] {
   const stylesheet = cssLanguageService.parseStylesheet(virtualCss.document)
 
-  return cssLanguageService.doValidation(virtualCss.document, stylesheet)
-    .flatMap((diagnostic) => {
-      const range = mapVirtualCssRangeToTemplateOffsets(diagnostic.range, template, virtualCss, diagnostic)
+  return cssLanguageService.doValidation(virtualCss.document, stylesheet).flatMap((diagnostic) => {
+    const range = mapVirtualCssRangeToTemplateOffsets(
+      diagnostic.range,
+      template,
+      virtualCss,
+      diagnostic,
+    )
 
-      return range ? [{ diagnostic, range }] : []
-    })
+    return range ? [{ diagnostic, range }] : []
+  })
 }
 
 export function mapVirtualCssRangeToTemplateOffsets(
@@ -52,9 +53,9 @@ export function mapVirtualCssRangeToTemplateOffsets(
   )
 
   if (
-    !sourceRange
-    || !isStaticTemplateRange(sourceRange, template, virtualCss)
-    || isInterpolationAdjacentValueDiagnostic(range, template, virtualCss, diagnostic)
+    !sourceRange ||
+    !isStaticTemplateRange(sourceRange, template, virtualCss) ||
+    isInterpolationAdjacentValueDiagnostic(range, template, virtualCss, diagnostic)
   ) {
     return undefined
   }
@@ -86,11 +87,11 @@ function isStaticTemplateRange(
   virtualCss: VirtualCssDocument,
 ) {
   if (
-    range.end <= range.start
-    || virtualCss.sourceStart !== template.bodyStart
-    || virtualCss.sourceLength !== template.maskedBody.length
-    || range.start < template.bodyStart
-    || range.end > template.bodyEnd
+    range.end <= range.start ||
+    virtualCss.sourceStart !== template.bodyStart ||
+    virtualCss.sourceLength !== template.maskedBody.length ||
+    range.start < template.bodyStart ||
+    range.end > template.bodyEnd
   ) {
     return false
   }
@@ -98,9 +99,9 @@ function isStaticTemplateRange(
   const start = range.start - template.bodyStart
   const end = range.end - template.bodyStart
 
-  return !template.interpolations.some((interpolation) => (
-    start < interpolation.end && end > interpolation.start
-  ))
+  return !template.interpolations.some(
+    (interpolation) => start < interpolation.end && end > interpolation.start,
+  )
 }
 
 function isInterpolationAdjacentValueDiagnostic(
@@ -114,13 +115,17 @@ function isInterpolationAdjacentValueDiagnostic(
   const start = virtualStart - virtualCss.prefixLength
   const end = virtualEnd - virtualCss.prefixLength
 
-  if (diagnostic?.code !== 'css-propertyvalueexpected' || virtualCss.document.getText(range) !== ';') {
+  if (
+    diagnostic?.code !== 'css-propertyvalueexpected' ||
+    virtualCss.document.getText(range) !== ';'
+  ) {
     return false
   }
 
-  return template.interpolations.some((interpolation) => (
-    interpolation.end <= start
-    && template.maskedBody.slice(interpolation.end, start).trim() === ''
-    && end === start + 1
-  ))
+  return template.interpolations.some(
+    (interpolation) =>
+      interpolation.end <= start &&
+      template.maskedBody.slice(interpolation.end, start).trim() === '' &&
+      end === start + 1,
+  )
 }

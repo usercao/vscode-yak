@@ -1,14 +1,12 @@
+import { describe, expect, it } from 'vitest'
 import {
   getCSSLanguageService,
   type Diagnostic as CssDiagnostic,
   type LanguageService,
 } from 'vscode-css-languageservice'
 import { TextDocument } from 'vscode-languageserver-textdocument'
-import { describe, expect, it } from 'vitest'
-import {
-  getMappedCssDiagnostics,
-  mapTemplateRangeToVirtualCssRange,
-} from '../src/diagnostics'
+
+import { getMappedCssDiagnostics, mapTemplateRangeToVirtualCssRange } from '../src/diagnostics'
 import type { VirtualCssDocument } from '../src/hover'
 import { createVirtualCssText, findTemplate, type Template } from '../src/template'
 
@@ -37,12 +35,7 @@ function getTemplate(source: string, needle: string): Template {
 }
 
 function styledSource(css: string): string {
-  return [
-    "import { styled } from 'yak'",
-    'const Panel = styled.div`',
-    `  ${css}`,
-    '`',
-  ].join('\n')
+  return ["import { styled } from 'yak'", 'const Panel = styled.div`', `  ${css}`, '`'].join('\n')
 }
 
 function cssDiagnostic(
@@ -121,13 +114,25 @@ describe('yak CSS diagnostics', () => {
       createVirtualDocument(unclosedValueTemplate),
     )
 
-    expect(missingSemicolonDiagnostics.some((diagnostic) => diagnostic.diagnostic.code === 'css-semicolonexpected')).toBe(true)
-    expect(missingSemicolonDiagnostics.some((diagnostic) => (
-      missingSemicolonSource.slice(diagnostic.range.start, diagnostic.range.end) === ':'
-    ))).toBe(true)
+    expect(
+      missingSemicolonDiagnostics.some(
+        (diagnostic) => diagnostic.diagnostic.code === 'css-semicolonexpected',
+      ),
+    ).toBe(true)
+    expect(
+      missingSemicolonDiagnostics.some(
+        (diagnostic) =>
+          missingSemicolonSource.slice(diagnostic.range.start, diagnostic.range.end) === ':',
+      ),
+    ).toBe(true)
     expect(unclosedValueDiagnostics).toHaveLength(1)
     expect(unclosedValueDiagnostics[0].diagnostic.code).toBe('css-rparentexpected')
-    expect(unclosedValueSource.slice(unclosedValueDiagnostics[0].range.start, unclosedValueDiagnostics[0].range.end)).toBe(';')
+    expect(
+      unclosedValueSource.slice(
+        unclosedValueDiagnostics[0].range.start,
+        unclosedValueDiagnostics[0].range.end,
+      ),
+    ).toBe(';')
   })
 
   it('preserves static diagnostics inside nested rules and keyframes', () => {
@@ -153,10 +158,14 @@ describe('yak CSS diagnostics', () => {
     )
 
     expect(nestedDiagnostics).toHaveLength(1)
-    expect(nestedSource.slice(nestedDiagnostics[0].range.start, nestedDiagnostics[0].range.end)).toBe('colro')
+    expect(
+      nestedSource.slice(nestedDiagnostics[0].range.start, nestedDiagnostics[0].range.end),
+    ).toBe('colro')
     expect(keyframesDiagnostics).toHaveLength(1)
     expect(keyframesDiagnostics[0].diagnostic.code).toBe('css-rparentexpected')
-    expect(keyframesSource.slice(keyframesDiagnostics[0].range.start, keyframesDiagnostics[0].range.end)).toBe(';')
+    expect(
+      keyframesSource.slice(keyframesDiagnostics[0].range.start, keyframesDiagnostics[0].range.end),
+    ).toBe(';')
   })
 
   it('rejects diagnostics that touch interpolations or synthetic wrappers', () => {
@@ -209,10 +218,22 @@ describe('yak CSS diagnostics', () => {
 
     expect(mapped).toBeDefined()
     expect(virtualCss.document.getText(mapped)).toBe('display')
-    expect(mapTemplateRangeToVirtualCssRange({
-      start: template.bodyStart + interpolation.start,
-      end: template.bodyStart + interpolation.end,
-    }, template, virtualCss)).toBeUndefined()
-    expect(mapTemplateRangeToVirtualCssRange({ start: displayStart, end: displayStart }, template, virtualCss)).toBeUndefined()
+    expect(
+      mapTemplateRangeToVirtualCssRange(
+        {
+          start: template.bodyStart + interpolation.start,
+          end: template.bodyStart + interpolation.end,
+        },
+        template,
+        virtualCss,
+      ),
+    ).toBeUndefined()
+    expect(
+      mapTemplateRangeToVirtualCssRange(
+        { start: displayStart, end: displayStart },
+        template,
+        virtualCss,
+      ),
+    ).toBeUndefined()
   })
 })

@@ -1,17 +1,13 @@
+import { describe, expect, it } from 'vitest'
 import type { CodeAction as CssCodeAction, Range as CssRange } from 'vscode-css-languageservice'
 import { TextDocument } from 'vscode-languageserver-textdocument'
-import { describe, expect, it } from 'vitest'
+
 import { mapVirtualCssCodeAction } from '../src/codeActions'
 import type { VirtualCssDocument } from '../src/hover'
 import { createVirtualCssText, findTemplate, type Template } from '../src/template'
 
 function styledSource(css: string): string {
-  return [
-    "import { styled } from 'yak'",
-    'const Panel = styled.div`',
-    `  ${css}`,
-    '`',
-  ].join('\n')
+  return ["import { styled } from 'yak'", 'const Panel = styled.div`', `  ${css}`, '`'].join('\n')
 }
 
 function createTemplate(source: string, needle: string): Template {
@@ -42,16 +38,21 @@ function rangeAtOffsets(virtualCss: VirtualCssDocument, start: number, end: numb
   }
 }
 
-function codeAction(virtualCss: VirtualCssDocument, ranges: readonly { newText: string; range: CssRange }[]): CssCodeAction {
+function codeAction(
+  virtualCss: VirtualCssDocument,
+  ranges: readonly { newText: string; range: CssRange }[],
+): CssCodeAction {
   return {
     edit: {
-      documentChanges: [{
-        edits: [...ranges],
-        textDocument: {
-          uri: virtualCss.document.uri,
-          version: virtualCss.document.version,
+      documentChanges: [
+        {
+          edits: [...ranges],
+          textDocument: {
+            uri: virtualCss.document.uri,
+            version: virtualCss.document.version,
+          },
         },
-      }],
+      ],
     },
     kind: 'quickfix',
     title: "Rename to 'color'",
@@ -65,7 +66,9 @@ describe('yak CSS code actions', () => {
     const virtualCss = createVirtualDocument(template)
     const start = virtualCss.prefixLength + template.maskedBody.indexOf('colro')
     const action = mapVirtualCssCodeAction(
-      codeAction(virtualCss, [{ newText: 'color', range: rangeAtOffsets(virtualCss, start, start + 5) }]),
+      codeAction(virtualCss, [
+        { newText: 'color', range: rangeAtOffsets(virtualCss, start, start + 5) },
+      ]),
       template,
       virtualCss,
     )
@@ -85,13 +88,19 @@ describe('yak CSS code actions', () => {
     const action = mapVirtualCssCodeAction(
       codeAction(virtualCss, [
         { newText: 'color', range: rangeAtOffsets(virtualCss, colroStart, colroStart + 5) },
-        { newText: 'background', range: rangeAtOffsets(virtualCss, bakgroundStart, bakgroundStart + 9) },
+        {
+          newText: 'background',
+          range: rangeAtOffsets(virtualCss, bakgroundStart, bakgroundStart + 9),
+        },
       ]),
       template,
       virtualCss,
     )
 
-    expect(action?.edits.map((edit) => source.slice(edit.range.start, edit.range.end))).toEqual(['colro', 'bakground'])
+    expect(action?.edits.map((edit) => source.slice(edit.range.start, edit.range.end))).toEqual([
+      'colro',
+      'bakground',
+    ])
   })
 
   it('rejects edits that touch wrappers, interpolations, other documents, multiline ranges, or commands', () => {
@@ -100,37 +109,59 @@ describe('yak CSS code actions', () => {
     const virtualCss = createVirtualDocument(template)
     const interpolation = template.interpolations[0]
     const colroStart = virtualCss.prefixLength + template.maskedBody.indexOf('colro')
-    const valid = { newText: 'color', range: rangeAtOffsets(virtualCss, colroStart, colroStart + 5) }
+    const valid = {
+      newText: 'color',
+      range: rangeAtOffsets(virtualCss, colroStart, colroStart + 5),
+    }
     const invalidActions: CssCodeAction[] = [
-      codeAction(virtualCss, [{ newText: 'x', range: rangeAtOffsets(virtualCss, virtualCss.prefixLength - 1, virtualCss.prefixLength) }]),
-      codeAction(virtualCss, [{
-        newText: 'x',
-        range: rangeAtOffsets(
-          virtualCss,
-          virtualCss.prefixLength + interpolation.start,
-          virtualCss.prefixLength + interpolation.end,
-        ),
-      }]),
-      codeAction(virtualCss, [{
-        newText: 'x',
-        range: rangeAtOffsets(
-          virtualCss,
-          virtualCss.prefixLength + template.maskedBody.length,
-          virtualCss.prefixLength + template.maskedBody.length + 1,
-        ),
-      }]),
-      codeAction(virtualCss, [{
-        newText: 'color',
-        range: rangeAtOffsets(virtualCss, colroStart, virtualCss.document.getText().indexOf('\n', colroStart + 5) + 1),
-      }]),
-      codeAction(virtualCss, [{ newText: 'color\n', range: rangeAtOffsets(virtualCss, colroStart, colroStart + 5) }]),
+      codeAction(virtualCss, [
+        {
+          newText: 'x',
+          range: rangeAtOffsets(virtualCss, virtualCss.prefixLength - 1, virtualCss.prefixLength),
+        },
+      ]),
+      codeAction(virtualCss, [
+        {
+          newText: 'x',
+          range: rangeAtOffsets(
+            virtualCss,
+            virtualCss.prefixLength + interpolation.start,
+            virtualCss.prefixLength + interpolation.end,
+          ),
+        },
+      ]),
+      codeAction(virtualCss, [
+        {
+          newText: 'x',
+          range: rangeAtOffsets(
+            virtualCss,
+            virtualCss.prefixLength + template.maskedBody.length,
+            virtualCss.prefixLength + template.maskedBody.length + 1,
+          ),
+        },
+      ]),
+      codeAction(virtualCss, [
+        {
+          newText: 'color',
+          range: rangeAtOffsets(
+            virtualCss,
+            colroStart,
+            virtualCss.document.getText().indexOf('\n', colroStart + 5) + 1,
+          ),
+        },
+      ]),
+      codeAction(virtualCss, [
+        { newText: 'color\n', range: rangeAtOffsets(virtualCss, colroStart, colroStart + 5) },
+      ]),
       {
         ...codeAction(virtualCss, [valid]),
         edit: {
-          documentChanges: [{
-            edits: [valid],
-            textDocument: { uri: 'yak:other', version: virtualCss.document.version },
-          }],
+          documentChanges: [
+            {
+              edits: [valid],
+              textDocument: { uri: 'yak:other', version: virtualCss.document.version },
+            },
+          ],
         },
       },
       {

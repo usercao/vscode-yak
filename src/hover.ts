@@ -8,11 +8,8 @@ import {
   type Range as CssRange,
 } from 'vscode-css-languageservice'
 import { TextDocument } from 'vscode-languageserver-textdocument'
-import {
-  mapVirtualRangeToSourceOffsets,
-  type Template,
-  type OffsetRange,
-} from './template'
+
+import { mapVirtualRangeToSourceOffsets, type Template, type OffsetRange } from './template'
 
 export interface VirtualCssDocument {
   document: TextDocument
@@ -32,9 +29,17 @@ interface CssDataEntry {
 }
 
 const cssDataProvider = getDefaultCSSDataProvider()
-const cssProperties = new Map(cssDataProvider.provideProperties().map((property) => [property.name, property]))
-const cssPseudoClasses = new Map(cssDataProvider.providePseudoClasses().map((pseudoClass) => [pseudoClass.name, pseudoClass]))
-const cssPseudoElements = new Map(cssDataProvider.providePseudoElements().map((pseudoElement) => [pseudoElement.name, pseudoElement]))
+const cssProperties = new Map(
+  cssDataProvider.provideProperties().map((property) => [property.name, property]),
+)
+const cssPseudoClasses = new Map(
+  cssDataProvider.providePseudoClasses().map((pseudoClass) => [pseudoClass.name, pseudoClass]),
+)
+const cssPseudoElements = new Map(
+  cssDataProvider
+    .providePseudoElements()
+    .map((pseudoElement) => [pseudoElement.name, pseudoElement]),
+)
 
 export function getMappedCssHover(
   cssLanguageService: LanguageService,
@@ -161,12 +166,17 @@ function getDeclarationProperty(body: string, cursorInBody: number): IPropertyDa
   return cssProperties.get(propertyMatch[1])
 }
 
-function getValueTokenAtOffset(body: string, cursorInBody: number): {
-  end: number
-  isFunction: boolean
-  start: number
-  text: string
-} | undefined {
+function getValueTokenAtOffset(
+  body: string,
+  cursorInBody: number,
+):
+  | {
+      end: number
+      isFunction: boolean
+      start: number
+      text: string
+    }
+  | undefined {
   let start = Math.min(cursorInBody, body.length)
   let end = Math.min(cursorInBody, body.length)
 
@@ -190,14 +200,24 @@ function getValueTokenAtOffset(body: string, cursorInBody: number): {
   }
 }
 
-function findValueData(property: IPropertyData, token: string, isFunction: boolean): IValueData | undefined {
+function findValueData(
+  property: IPropertyData,
+  token: string,
+  isFunction: boolean,
+): IValueData | undefined {
   const functionName = isFunction ? `${token}()` : undefined
 
-  return property.values?.find((value) => value.name === token
-    || (functionName !== undefined && value.name.replace(/\(.*/, '()') === functionName))
+  return property.values?.find(
+    (value) =>
+      value.name === token ||
+      (functionName !== undefined && value.name.replace(/\(.*/, '()') === functionName),
+  )
 }
 
-function findPseudoAtOffset(body: string, cursorInBody: number): { end: number; start: number; text: string } | undefined {
+function findPseudoAtOffset(
+  body: string,
+  cursorInBody: number,
+): { end: number; start: number; text: string } | undefined {
   const pattern = /:{1,2}[-\w]+/g
 
   for (let match = pattern.exec(body); match; match = pattern.exec(body)) {
@@ -213,8 +233,12 @@ function findPseudoAtOffset(body: string, cursorInBody: number): { end: number; 
 }
 
 function isSelectorHover(hover: CssHover | null): boolean {
-  return Array.isArray(hover?.contents)
-    && hover.contents.some((content) => typeof content === 'string' && content.includes('Selector Specificity'))
+  return (
+    Array.isArray(hover?.contents) &&
+    hover.contents.some(
+      (content) => typeof content === 'string' && content.includes('Selector Specificity'),
+    )
+  )
 }
 
 function isCssIdentifierCharacter(character: string | undefined): boolean {
@@ -226,9 +250,8 @@ function toCssDataContents(entry: CssDataEntry): CssHover['contents'] | undefine
     return undefined
   }
 
-  const description = typeof entry.description === 'string'
-    ? entry.description
-    : entry.description.value
+  const description =
+    typeof entry.description === 'string' ? entry.description : entry.description.value
   const references = entry.references ?? []
   const referenceMarkdown = references
     .map((reference) => `[${reference.name}](${reference.url})`)

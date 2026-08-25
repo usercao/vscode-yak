@@ -1,3 +1,4 @@
+import colorNames from 'color-name'
 import type {
   Color as CssColor,
   ColorInformation as CssColorInformation,
@@ -5,8 +6,11 @@ import type {
   LanguageService,
   TextEdit as CssTextEdit,
 } from 'vscode-css-languageservice'
-import colorNames from 'color-name'
-import { mapTemplateRangeToVirtualCssRange, mapVirtualCssRangeToTemplateOffsets } from './diagnostics'
+
+import {
+  mapTemplateRangeToVirtualCssRange,
+  mapVirtualCssRangeToTemplateOffsets,
+} from './diagnostics'
 import type { VirtualCssDocument } from './hover'
 import type { Template, OffsetRange } from './template'
 
@@ -33,8 +37,11 @@ export function getMappedCssColors(
 ): MappedCssColor[] {
   const stylesheet = cssLanguageService.parseStylesheet(virtualCss.document)
 
-  return cssLanguageService.findDocumentColors(virtualCss.document, stylesheet)
-    .flatMap((colorInformation) => mapVirtualCssColorInformation(colorInformation, template, virtualCss))
+  return cssLanguageService
+    .findDocumentColors(virtualCss.document, stylesheet)
+    .flatMap((colorInformation) =>
+      mapVirtualCssColorInformation(colorInformation, template, virtualCss),
+    )
 }
 
 export function getMappedCssColorPresentations(
@@ -56,13 +63,15 @@ export function getMappedCssColorPresentations(
 
   const stylesheet = cssLanguageService.parseStylesheet(virtualCss.document)
 
-  const presentations = cssLanguageService.getColorPresentations(
-    virtualCss.document,
-    stylesheet,
+  const presentations = cssLanguageService
+    .getColorPresentations(virtualCss.document, stylesheet, color, virtualRange)
+    .flatMap((presentation) => mapVirtualCssColorPresentation(presentation, template, virtualCss))
+  const namedColorPresentation = getNamedColorPresentation(
     color,
     virtualRange,
-  ).flatMap((presentation) => mapVirtualCssColorPresentation(presentation, template, virtualCss))
-  const namedColorPresentation = getNamedColorPresentation(color, virtualRange, template, virtualCss)
+    template,
+    virtualCss,
+  )
 
   return namedColorPresentation ? [...presentations, namedColorPresentation] : presentations
 }
@@ -72,7 +81,11 @@ export function mapVirtualCssColorInformation(
   template: Template,
   virtualCss: VirtualCssDocument,
 ): MappedCssColor[] {
-  const range = mapVirtualCssColorRangeToTemplateOffsets(colorInformation.range, template, virtualCss)
+  const range = mapVirtualCssColorRangeToTemplateOffsets(
+    colorInformation.range,
+    template,
+    virtualCss,
+  )
 
   return range ? [{ color: colorInformation.color, range }] : []
 }
@@ -94,18 +107,20 @@ export function mapVirtualCssColorPresentation(
   })
 
   if (
-    !textEdit
-    || additionalTextEdits.length !== (presentation.additionalTextEdits?.length ?? 0)
-    || hasOverlappingEdits([textEdit, ...additionalTextEdits])
+    !textEdit ||
+    additionalTextEdits.length !== (presentation.additionalTextEdits?.length ?? 0) ||
+    hasOverlappingEdits([textEdit, ...additionalTextEdits])
   ) {
     return []
   }
 
-  return [{
-    ...(additionalTextEdits.length > 0 ? { additionalTextEdits } : {}),
-    label: presentation.label,
-    textEdit,
-  }]
+  return [
+    {
+      ...(additionalTextEdits.length > 0 ? { additionalTextEdits } : {}),
+      label: presentation.label,
+      textEdit,
+    },
+  ]
 }
 
 function mapVirtualCssColorTextEdit(
@@ -141,10 +156,12 @@ function getNamedColorPresentation(
   const name = findColorName(color)
   const range = mapVirtualCssColorRangeToTemplateOffsets(virtualRange, template, virtualCss)
 
-  return name && range ? {
-    label: name,
-    textEdit: { newText: name, range },
-  } : undefined
+  return name && range
+    ? {
+        label: name,
+        textEdit: { newText: name, range },
+      }
+    : undefined
 }
 
 function findColorName(color: CssColor) {
@@ -156,9 +173,9 @@ function findColorName(color: CssColor) {
     return undefined
   }
 
-  return Object.entries(colorNames).find(([, value]) => (
-    value[0] === red && value[1] === green && value[2] === blue
-  ))?.[0]
+  return Object.entries(colorNames).find(
+    ([, value]) => value[0] === red && value[1] === green && value[2] === blue,
+  )?.[0]
 }
 
 function toExactColorByte(channel: number) {
@@ -176,9 +193,9 @@ function isCssColorRange(range: OffsetRange, template: Template) {
     return false
   }
 
-  return !getCssProtectedRanges(template.maskedBody).some((protectedRange) => (
-    start < protectedRange.end && end > protectedRange.start
-  ))
+  return !getCssProtectedRanges(template.maskedBody).some(
+    (protectedRange) => start < protectedRange.end && end > protectedRange.start,
+  )
 }
 
 function getCssProtectedRanges(text: string): OffsetRange[] {

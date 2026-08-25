@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest'
 import {
   getCSSLanguageService,
   type ColorInformation as CssColorInformation,
@@ -5,7 +6,7 @@ import {
   type LanguageService,
 } from 'vscode-css-languageservice'
 import { TextDocument } from 'vscode-languageserver-textdocument'
-import { describe, expect, it } from 'vitest'
+
 import {
   getMappedCssColorPresentations,
   getMappedCssColors,
@@ -38,12 +39,7 @@ function getTemplate(source: string, needle: string): Template {
 }
 
 function styledSource(css: string): string {
-  return [
-    "import { styled } from 'yak'",
-    'const Panel = styled.div`',
-    `  ${css}`,
-    '`',
-  ].join('\n')
+  return ["import { styled } from 'yak'", 'const Panel = styled.div`', `  ${css}`, '`'].join('\n')
 }
 
 function colorInformation(
@@ -62,15 +58,17 @@ function colorInformation(
 
 describe('yak CSS colors', () => {
   it('maps static hex, alpha, named, and gradient colors while excluding interpolations, comments, and strings', () => {
-    const source = styledSource([
-      'color: #176b5b;',
-      '  outline-color: rgba(23, 107, 91, 0.5);',
-      '  border-color: rebeccapurple;',
-      '  background: linear-gradient(#fff, hsl(160 45% 26%));',
-      '  /* #ff0000 */',
-      '  content: "#00ff00";',
-      '  color: ${theme.accent};',
-    ].join('\n  '))
+    const source = styledSource(
+      [
+        'color: #176b5b;',
+        '  outline-color: rgba(23, 107, 91, 0.5);',
+        '  border-color: rebeccapurple;',
+        '  background: linear-gradient(#fff, hsl(160 45% 26%));',
+        '  /* #ff0000 */',
+        '  content: "#00ff00";',
+        '  color: ${theme.accent};',
+      ].join('\n  '),
+    )
     const template = getTemplate(source, '#176b5b')
     const colors = getMappedCssColors(cssLanguageService, template, createVirtualDocument(template))
 
@@ -81,7 +79,11 @@ describe('yak CSS colors', () => {
       '#fff',
       'hsl(160 45% 26%)',
     ])
-    expect(colors.find((color) => source.slice(color.range.start, color.range.end) === 'rgba(23, 107, 91, 0.5)')?.color.alpha).toBe(0.5)
+    expect(
+      colors.find(
+        (color) => source.slice(color.range.start, color.range.end) === 'rgba(23, 107, 91, 0.5)',
+      )?.color.alpha,
+    ).toBe(0.5)
   })
 
   it('maps CSS Language Service color presentations back to the named source color', () => {
@@ -97,15 +99,21 @@ describe('yak CSS colors', () => {
       virtualCss,
     )
 
-    expect(presentations.map((presentation) => presentation.label)).toEqual(expect.arrayContaining([
-      'rgb(102, 51, 153)',
-      '#663399',
-      'hsl(270, 50%, 40%)',
-      'rebeccapurple',
-    ]))
-    expect(presentations.every((presentation) => (
-      source.slice(presentation.textEdit.range.start, presentation.textEdit.range.end) === 'rebeccapurple'
-    ))).toBe(true)
+    expect(presentations.map((presentation) => presentation.label)).toEqual(
+      expect.arrayContaining([
+        'rgb(102, 51, 153)',
+        '#663399',
+        'hsl(270, 50%, 40%)',
+        'rebeccapurple',
+      ]),
+    )
+    expect(
+      presentations.every(
+        (presentation) =>
+          source.slice(presentation.textEdit.range.start, presentation.textEdit.range.end) ===
+          'rebeccapurple',
+      ),
+    ).toBe(true)
   })
 
   it('only adds a named-color presentation for an opaque exact RGB match', () => {
@@ -141,12 +149,14 @@ describe('yak CSS colors', () => {
   })
 
   it('rejects color information and presentations that touch comments, strings, interpolations, or wrappers', () => {
-    const source = styledSource([
-      'color: #176b5b;',
-      '  /* #ff0000 */',
-      '  content: "#00ff00";',
-      '  color: ${theme.accent};',
-    ].join('\n  '))
+    const source = styledSource(
+      [
+        'color: #176b5b;',
+        '  /* #ff0000 */',
+        '  content: "#00ff00";',
+        '  color: ${theme.accent};',
+      ].join('\n  '),
+    )
     const template = getTemplate(source, '#176b5b')
     const virtualCss = createVirtualDocument(template)
     const staticStart = virtualCss.prefixLength + template.maskedBody.indexOf('#176b5b')

@@ -58,7 +58,11 @@ function sourceWithCursor(lines: readonly string[]) {
   return findTemplateAtCursor(lines.join('\n'))
 }
 
-function templateCacheRequest(sourceWithCursor: string, version: number, uri = 'file:///fixture.tsx') {
+function templateCacheRequest(
+  sourceWithCursor: string,
+  version: number,
+  uri = 'file:///fixture.tsx',
+) {
   const cursorOffset = sourceWithCursor.indexOf(cursorMarker)
 
   if (cursorOffset === -1) {
@@ -77,7 +81,11 @@ function templateCacheRequest(sourceWithCursor: string, version: number, uri = '
   }
 }
 
-function expectTemplateTag(source: string, expectedTag: 'styled' | 'css' | 'globalStyle' | 'keyframes', languageId = 'typescriptreact') {
+function expectTemplateTag(
+  source: string,
+  expectedTag: 'styled' | 'css' | 'globalStyle' | 'keyframes',
+  languageId = 'typescriptreact',
+) {
   expect(findTemplateAtCursor(source, languageId).template?.tag).toBe(expectedTag)
 }
 
@@ -89,10 +97,7 @@ describe('findTemplate', () => {
     ['keyframes', 'keyframes'],
   ])('recognizes direct yak %s imports', (expectedTag, tagExpression) => {
     const { template } = findTemplateAtCursor(
-      styledSource(
-        tagExpression,
-        "import { css, globalStyle, keyframes, styled } from 'yak'",
-      ),
+      styledSource(tagExpression, "import { css, globalStyle, keyframes, styled } from 'yak'"),
     )
 
     expect(template?.tag).toBe(expectedTag)
@@ -100,24 +105,19 @@ describe('findTemplate', () => {
 
   it('recognizes aliases and namespace imports', () => {
     expect(
-      findTemplateAtCursor(
-        styledSource('s.div', "import { styled as s } from 'yak'"),
-      ).template?.tag,
+      findTemplateAtCursor(styledSource('s.div', "import { styled as s } from 'yak'")).template
+        ?.tag,
     ).toBe('styled')
     expect(
-      findTemplateAtCursor(
-        styledSource('rules', "import { css as rules } from 'yak'"),
-      ).template?.tag,
+      findTemplateAtCursor(styledSource('rules', "import { css as rules } from 'yak'")).template
+        ?.tag,
     ).toBe('css')
     expect(
-      findTemplateAtCursor(
-        styledSource('yak.styled.a', "import * as yak from 'yak'"),
-      ).template?.tag,
+      findTemplateAtCursor(styledSource('yak.styled.a', "import * as yak from 'yak'")).template
+        ?.tag,
     ).toBe('styled')
     expect(
-      findTemplateAtCursor(
-        styledSource('yak.css', "import * as yak from 'yak'"),
-      ).template?.tag,
+      findTemplateAtCursor(styledSource('yak.css', "import * as yak from 'yak'")).template?.tag,
     ).toBe('css')
   })
 
@@ -204,17 +204,27 @@ describe('findTemplate', () => {
   })
 
   it('defines import type, duplicate, conflict, and invalid import behavior', () => {
-    expect(findTemplateAtCursor(styledSource('styled.div', "import type { styled } from 'yak'")).template).toBeUndefined()
-    expect(findTemplateAtCursor(styledSource('styled.div', "import { type styled } from 'yak'")).template).toBeUndefined()
-    expect(findTemplateAtCursor(styledSource('yak.styled.div', "import type * as yak from 'yak'")).template).toBeUndefined()
+    expect(
+      findTemplateAtCursor(styledSource('styled.div', "import type { styled } from 'yak'"))
+        .template,
+    ).toBeUndefined()
+    expect(
+      findTemplateAtCursor(styledSource('styled.div', "import { type styled } from 'yak'"))
+        .template,
+    ).toBeUndefined()
+    expect(
+      findTemplateAtCursor(styledSource('yak.styled.div', "import type * as yak from 'yak'"))
+        .template,
+    ).toBeUndefined()
 
-    expect(findTemplateAtCursor(styledSource(
-      'styled.div',
-      [
-        "import type { styled } from 'yak'",
-        "import { styled } from 'yak'",
-      ].join('\n'),
-    )).template).toBeUndefined()
+    expect(
+      findTemplateAtCursor(
+        styledSource(
+          'styled.div',
+          ["import type { styled } from 'yak'", "import { styled } from 'yak'"].join('\n'),
+        ),
+      ).template,
+    ).toBeUndefined()
 
     expectTemplateTag(
       styledSource(
@@ -230,22 +240,20 @@ describe('findTemplate', () => {
     expectTemplateTag(
       styledSource(
         's.div',
-        [
-          "import { styled } from 'yak'",
-          "import { styled as s } from 'yak'",
-        ].join('\n'),
+        ["import { styled } from 'yak'", "import { styled as s } from 'yak'"].join('\n'),
       ),
       'styled',
     )
 
-    expect(findTemplateAtCursor(styledSource('styled.div', "import { styled as } from 'yak'")).template).toBeUndefined()
+    expect(
+      findTemplateAtCursor(styledSource('styled.div', "import { styled as } from 'yak'")).template,
+    ).toBeUndefined()
   })
 
   it('does not handle similarly named tags from another module or local bindings', () => {
     expect(
-      findTemplateAtCursor(
-        styledSource('styled.div', "import { styled } from 'another-library'"),
-      ).template,
+      findTemplateAtCursor(styledSource('styled.div', "import { styled } from 'another-library'"))
+        .template,
     ).toBeUndefined()
 
     const source = [
@@ -276,7 +284,10 @@ describe('findTemplate', () => {
     expect(template?.maskedBody).toContain('background: red;')
     expect(template?.maskedBody.length).toBe((template?.bodyEnd ?? 0) - (template?.bodyStart ?? 0))
 
-    const interpolationSource = source.replace('background: red;/*cursor*/', 'background: ${/*cursor*/accent};')
+    const interpolationSource = source.replace(
+      'background: red;/*cursor*/',
+      'background: ${/*cursor*/accent};',
+    )
     expect(findTemplateAtCursor(interpolationSource).template).toBeUndefined()
   })
 
@@ -363,7 +374,10 @@ describe('findTemplate', () => {
     ].join('\r\n')
     const found = findTemplateAtCursor(source)
     const { template } = found
-    const body = found.source.slice(template?.bodyStart, (template?.bodyStart ?? 0) + (template?.maskedBody.length ?? 0))
+    const body = found.source.slice(
+      template?.bodyStart,
+      (template?.bodyStart ?? 0) + (template?.maskedBody.length ?? 0),
+    )
 
     expect(template?.maskedBody).toContain('\r\n')
     expect(template?.maskedBody.match(/\r\n/g)?.length).toBe(body.match(/\r\n/g)?.length)
@@ -372,11 +386,7 @@ describe('findTemplate', () => {
 
   it('does not throw for incomplete templates, interpolations, or malformed TSX', () => {
     const cases = [
-      [
-        "import { styled } from 'yak'",
-        'const Panel = styled.div`',
-        `  color: re${cursorMarker}`,
-      ],
+      ["import { styled } from 'yak'", 'const Panel = styled.div`', `  color: re${cursorMarker}`],
       [
         "import { styled } from 'yak'",
         'const Panel = styled.div`',
@@ -470,12 +480,9 @@ describe('TemplateCache', () => {
     const cache = new TemplateCache()
     const initial = templateCacheRequest(styledSource('styled.div'), 1)
     const modified = templateCacheRequest(
-      [
-        "import { css } from 'yak'",
-        'const Value = styled.div`',
-        `  col${cursorMarker}`,
-        '`',
-      ].join('\n'),
+      ["import { css } from 'yak'", 'const Value = styled.div`', `  col${cursorMarker}`, '`'].join(
+        '\n',
+      ),
       2,
       initial.document.uri,
     )
@@ -489,12 +496,9 @@ describe('TemplateCache', () => {
     const cache = new TemplateCache()
     const initial = templateCacheRequest(styledSource('styled.div'), 1)
     const reopened = templateCacheRequest(
-      [
-        "import { css } from 'yak'",
-        'const Value = styled.div`',
-        `  col${cursorMarker}`,
-        '`',
-      ].join('\n'),
+      ["import { css } from 'yak'", 'const Value = styled.div`', `  col${cursorMarker}`, '`'].join(
+        '\n',
+      ),
       1,
       initial.document.uri,
     )
@@ -602,18 +606,16 @@ describe('virtual CSS mapping', () => {
     const found = findTemplateAtCursor(source)
 
     expect(found.template).toBeDefined()
-    expect(getSelectorCompletionContext(found.source, found.cursorOffset, found.template!)).toEqual({
-      sourceStart: found.source.indexOf('a:'),
-      text: 'a:',
-    })
+    expect(getSelectorCompletionContext(found.source, found.cursorOffset, found.template!)).toEqual(
+      {
+        sourceStart: found.source.indexOf('a:'),
+        text: 'a:',
+      },
+    )
   })
 
   it('does not extract selectors from at-rules, interpolations, or completed rules', () => {
-    const cases = [
-      '@media',
-      'a:hover {',
-      '${value}',
-    ]
+    const cases = ['@media', 'a:hover {', '${value}']
 
     for (const line of cases) {
       const found = sourceWithCursor([
@@ -624,7 +626,9 @@ describe('virtual CSS mapping', () => {
       ])
 
       expect(found.template).toBeDefined()
-      expect(getSelectorCompletionContext(found.source, found.cursorOffset, found.template!)).toBeUndefined()
+      expect(
+        getSelectorCompletionContext(found.source, found.cursorOffset, found.template!),
+      ).toBeUndefined()
     }
   })
 
@@ -651,7 +655,9 @@ describe('virtual CSS mapping', () => {
       '  }',
       '`',
     ])
-    expect(getAtRuleCompletionContext(nestedName.source, nestedName.cursorOffset, nestedName.template!)).toEqual({
+    expect(
+      getAtRuleCompletionContext(nestedName.source, nestedName.cursorOffset, nestedName.template!),
+    ).toEqual({
       allowsTopLevelRules: false,
       kind: 'name',
       nested: true,
@@ -665,7 +671,9 @@ describe('virtual CSS mapping', () => {
       `  @pro${cursorMarker}`,
       '`',
     ])
-    expect(getAtRuleCompletionContext(globalName.source, globalName.cursorOffset, globalName.template!)).toEqual({
+    expect(
+      getAtRuleCompletionContext(globalName.source, globalName.cursorOffset, globalName.template!),
+    ).toEqual({
       allowsTopLevelRules: true,
       kind: 'name',
       nested: false,
@@ -679,7 +687,9 @@ describe('virtual CSS mapping', () => {
       `  @media ${cursorMarker}`,
       '`',
     ])
-    expect(getAtRuleCompletionContext(prelude.source, prelude.cursorOffset, prelude.template!)).toEqual({ kind: 'prelude' })
+    expect(
+      getAtRuleCompletionContext(prelude.source, prelude.cursorOffset, prelude.template!),
+    ).toEqual({ kind: 'prelude' })
 
     const groupedRule = sourceWithCursor([
       "import { styled } from 'yak'",
@@ -689,7 +699,13 @@ describe('virtual CSS mapping', () => {
       '  }',
       '`',
     ])
-    expect(getAtRuleCompletionContext(groupedRule.source, groupedRule.cursorOffset, groupedRule.template!)).toEqual({ kind: 'rule' })
+    expect(
+      getAtRuleCompletionContext(
+        groupedRule.source,
+        groupedRule.cursorOffset,
+        groupedRule.template!,
+      ),
+    ).toEqual({ kind: 'rule' })
 
     const descriptor = sourceWithCursor([
       "import { globalStyle } from 'yak'",
@@ -699,7 +715,9 @@ describe('virtual CSS mapping', () => {
       '  }',
       '`',
     ])
-    expect(getAtRuleCompletionContext(descriptor.source, descriptor.cursorOffset, descriptor.template!)).toEqual({
+    expect(
+      getAtRuleCompletionContext(descriptor.source, descriptor.cursorOffset, descriptor.template!),
+    ).toEqual({
       atRuleName: '@property',
       kind: 'descriptor',
       sourceStart: descriptor.source.indexOf('syn'),
@@ -708,12 +726,7 @@ describe('virtual CSS mapping', () => {
   })
 
   it('rejects at-rule completions in isolated or invalid CSS positions', () => {
-    const cases = [
-      'color: @',
-      '/* @med',
-      'content: "@med',
-      'background: url(@med',
-    ]
+    const cases = ['color: @', '/* @med', 'content: "@med', 'background: url(@med']
 
     for (const line of cases) {
       const found = sourceWithCursor([
@@ -723,7 +736,9 @@ describe('virtual CSS mapping', () => {
         '`',
       ])
 
-      expect(getAtRuleCompletionContext(found.source, found.cursorOffset, found.template!)).toBeUndefined()
+      expect(
+        getAtRuleCompletionContext(found.source, found.cursorOffset, found.template!),
+      ).toBeUndefined()
     }
 
     for (const lines of [
@@ -751,16 +766,13 @@ describe('virtual CSS mapping', () => {
         '  }',
         '`',
       ],
-      [
-        "import { keyframes } from 'yak'",
-        'const spin = keyframes`',
-        `  @med${cursorMarker}`,
-        '`',
-      ],
+      ["import { keyframes } from 'yak'", 'const spin = keyframes`', `  @med${cursorMarker}`, '`'],
     ]) {
       const found = sourceWithCursor(lines)
 
-      expect(getAtRuleCompletionContext(found.source, found.cursorOffset, found.template!)).toEqual({ kind: 'blocked' })
+      expect(getAtRuleCompletionContext(found.source, found.cursorOffset, found.template!)).toEqual(
+        { kind: 'blocked' },
+      )
     }
   })
 
@@ -776,9 +788,11 @@ describe('virtual CSS mapping', () => {
       '`',
     ])
 
-    expect(getSelectorCompletionContext(found.source, found.cursorOffset, found.template!)).toEqual({
-      sourceStart: found.source.indexOf(selector),
-      text: expectedText,
-    })
+    expect(getSelectorCompletionContext(found.source, found.cursorOffset, found.template!)).toEqual(
+      {
+        sourceStart: found.source.indexOf(selector),
+        text: expectedText,
+      },
+    )
   })
 })
