@@ -49,6 +49,17 @@
     "vscode-textmate": "^9.3.2"
   },
   "contributes": {
+    "configuration": {
+      "title": "next-yak",
+      "properties": {
+        "nextYak.css.validate": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "markdownDescription": "Enable CSS diagnostics inside statically recognized next-yak tagged templates. This does not affect CSS completion or hover."
+        }
+      }
+    },
     "grammars": [
       {
         "scopeName": "next-yak.injection",

@@ -45,10 +45,25 @@ interface DirectHoverProviderConstructor {
   new (): DirectHoverProvider
 }
 
+interface DirectCodeActionProvider {
+  provideCodeActions(
+    document: vscode.TextDocument,
+    range: vscode.Range,
+    context: vscode.CodeActionContext,
+    token: vscode.CancellationToken,
+  ): vscode.CodeAction[] | undefined
+}
+
+interface DirectCodeActionProviderConstructor {
+  new (): DirectCodeActionProvider
+}
+
 interface ExtensionModule {
+  NextYakCssCodeActionProvider?: DirectCodeActionProviderConstructor
   NextYakCssCompletionProvider?: DirectCompletionProviderConstructor
   NextYakCssHoverProvider?: DirectHoverProviderConstructor
   default?: {
+    NextYakCssCodeActionProvider?: DirectCodeActionProviderConstructor
     NextYakCssCompletionProvider?: DirectCompletionProviderConstructor
     NextYakCssHoverProvider?: DirectHoverProviderConstructor
   }
@@ -245,6 +260,14 @@ async function createDirectHoverProvider(extensionPath: string): Promise<DirectH
   return new Provider()
 }
 
+async function createDirectCodeActionProvider(extensionPath: string): Promise<DirectCodeActionProvider> {
+  const extensionModule = await import(pathToFileURL(join(extensionPath, 'dist', 'extension.cjs')).href) as ExtensionModule
+  const Provider = extensionModule.NextYakCssCodeActionProvider ?? extensionModule.default?.NextYakCssCodeActionProvider
+
+  assert.ok(Provider, 'Expected the extension bundle to export NextYakCssCodeActionProvider')
+  return new Provider()
+}
+
 function cancellationToken(cancelOnCheck: number): vscode.CancellationToken {
   let checks = 0
 
@@ -315,6 +338,48 @@ async function registeredHoversAt(document: vscode.TextDocument, cursorOffset: n
     document.uri,
     document.positionAt(cursorOffset),
   )
+}
+
+async function registeredCodeActionsAt(
+  document: vscode.TextDocument,
+  range: vscode.Range,
+): Promise<readonly vscode.CodeAction[]> {
+  await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true })
+
+  return vscode.commands.executeCommand<vscode.CodeAction[]>(
+    'vscode.executeCodeActionProvider',
+    document.uri,
+    range,
+    vscode.CodeActionKind.QuickFix.value,
+  )
+}
+
+function diagnosticsFor(document: vscode.TextDocument): readonly vscode.Diagnostic[] {
+  return vscode.languages.getDiagnostics(document.uri)
+    .filter((diagnostic) => diagnostic.source === 'next-yak CSS')
+}
+
+function diagnosticForText(document: vscode.TextDocument, text: string): vscode.Diagnostic | undefined {
+  return diagnosticsFor(document).find((diagnostic) => document.getText(diagnostic.range) === text)
+}
+
+function workspaceEditEntries(action: vscode.CodeAction, document: vscode.TextDocument): readonly [vscode.Range, string][] {
+  if (!action.edit) {
+    throw new Error(`Expected ${action.title} to include a workspace edit`)
+  }
+
+  return action.edit.entries()
+    .filter(([uri]) => uri.toString() === document.uri.toString())
+    .flatMap(([, edits]) => edits.map((edit) => [edit.range, edit.newText] as [vscode.Range, string]))
+}
+
+async function resourceExists(uri: vscode.Uri): Promise<boolean> {
+  try {
+    await vscode.workspace.fs.stat(uri)
+    return true
+  } catch {
+    return false
+  }
 }
 
 export async function run(): Promise<void> {
@@ -698,6 +763,181 @@ export async function run(): Promise<void> {
     assert.ok(
       registeredHovers.some((hover) => hoverContentText(hover).includes('MDN Reference')),
       'Expected the activated extension to register a CSS HoverProvider',
+    )
+  })
+
+  await runCase('surfaces mapped CSS diagnostics and filters interpolation-adjacent false positives', async () => {
+    const source = [
+      "import { styled } from 'next-yak'",
+      'const Panel = styled.div`',
+      '  color: ${theme.accent};',
+      '  colro: red;',
+      '`',
+    ].join('\n')
+    const document = await vscode.workspace.openTextDocument({ language: 'typescriptreact', content: source })
+
+    await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true })
+    const unknownProperty = diagnosticForText(document, 'colro')
+
+    assert.ok(unknownProperty, 'Expected a mapped unknown-property diagnostic')
+    assert.equal(unknownProperty.code, 'unknownProperties')
+    assert.equal(unknownProperty.source, 'next-yak CSS')
+    assert.equal(diagnosticForText(document, ';'), undefined, 'Expected no empty-value diagnostic from the interpolation placeholder')
+  })
+
+  await runCase('updates diagnostics after edits, language changes, close, and configuration changes', async () => {
+    const source = [
+      "import { styled } from 'next-yak'",
+      'const Panel = styled.div`',
+      '  colro: red;',
+      '`',
+    ].join('\n')
+    const document = await vscode.workspace.openTextDocument({ language: 'typescriptreact', content: source })
+    const editor = await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true })
+
+    assert.ok(diagnosticForText(document, 'colro'), 'Expected initial CSS diagnostic')
+    const typoStart = document.getText().indexOf('colro')
+    await editor.edit((edit) => edit.replace(
+      new vscode.Range(document.positionAt(typoStart), document.positionAt(typoStart + 5)),
+      'color',
+    ))
+    assert.equal(diagnosticForText(document, 'color'), undefined, 'Expected diagnostics to refresh after editing CSS')
+
+    await editor.edit((edit) => edit.replace(
+      new vscode.Range(document.positionAt(typoStart), document.positionAt(typoStart + 5)),
+      'colro',
+    ))
+    assert.ok(diagnosticForText(document, 'colro'), 'Expected diagnostics to return after reintroducing the typo')
+
+    const configuration = vscode.workspace.getConfiguration('nextYak', document.uri)
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
+    const settingsDirectory = workspaceFolder && vscode.Uri.joinPath(workspaceFolder.uri, '.vscode')
+    const settingsFile = settingsDirectory && vscode.Uri.joinPath(settingsDirectory, 'settings.json')
+    const settingsDirectoryExisted = settingsDirectory ? await resourceExists(settingsDirectory) : true
+    const settingsFileExisted = settingsFile ? await resourceExists(settingsFile) : true
+    const previousWorkspaceValue = configuration.inspect<boolean>('css.validate')?.workspaceValue
+
+    try {
+      await configuration.update('css.validate', false, vscode.ConfigurationTarget.Workspace)
+      assert.deepEqual(diagnosticsFor(document), [], 'Expected CSS diagnostics to clear when validation is disabled')
+      await configuration.update('css.validate', true, vscode.ConfigurationTarget.Workspace)
+      assert.ok(diagnosticForText(document, 'colro'), 'Expected CSS diagnostics to return when validation is enabled')
+
+      const javascriptDocument = await vscode.languages.setTextDocumentLanguage(document, 'javascript')
+      assert.ok(diagnosticForText(javascriptDocument, 'colro'), 'Expected diagnostics after switching to another supported language')
+      const plaintextDocument = await vscode.languages.setTextDocumentLanguage(javascriptDocument, 'plaintext')
+      assert.deepEqual(diagnosticsFor(plaintextDocument), [], 'Expected diagnostics to clear after switching to an unsupported language')
+
+      const closeDocument = await vscode.workspace.openTextDocument({ language: 'typescriptreact', content: source })
+      await vscode.window.showTextDocument(closeDocument, { preview: false, preserveFocus: true })
+      assert.ok(diagnosticForText(closeDocument, 'colro'), 'Expected a CSS diagnostic before closing a supported document')
+      await vscode.commands.executeCommand('workbench.action.closeActiveEditor')
+      assert.deepEqual(diagnosticsFor(closeDocument), [], 'Expected no retained diagnostics after closing the document')
+    } finally {
+      await configuration.update('css.validate', previousWorkspaceValue, vscode.ConfigurationTarget.Workspace)
+
+      if (settingsFile && !settingsFileExisted && await resourceExists(settingsFile)) {
+        await vscode.workspace.fs.delete(settingsFile, { useTrash: false })
+      }
+
+      if (settingsDirectory && !settingsDirectoryExisted && await resourceExists(settingsDirectory)) {
+        await vscode.workspace.fs.delete(settingsDirectory, { recursive: false, useTrash: false })
+      }
+    }
+  })
+
+  await runCase('offers a safe mapped CSS spelling quick fix and rejects interpolation fixes', async () => {
+    const source = [
+      "import { styled } from 'next-yak'",
+      'const Panel = styled.div`',
+      '  colro: red;',
+      '  color: ${theme.accent};',
+      '`',
+    ].join('\n')
+    const document = await vscode.workspace.openTextDocument({ language: 'typescriptreact', content: source })
+    const typo = diagnosticForText(document, 'colro')
+
+    assert.ok(typo, 'Expected a CSS spelling diagnostic before requesting code actions')
+    const provider = await createDirectCodeActionProvider(extension.extensionPath)
+    const directActions = provider.provideCodeActions(document, typo.range, {
+      diagnostics: [typo],
+      only: vscode.CodeActionKind.QuickFix,
+      triggerKind: vscode.CodeActionTriggerKind.Invoke,
+    }, neverCancelledToken)
+    const directColorAction = directActions?.find((action) => action.title === "Rename to 'color'")
+
+    assert.ok(directColorAction, 'Expected the direct provider to return a Rename to color quick fix')
+    assert.ok(
+      directColorAction.diagnostics?.some((diagnostic) => diagnostic.source === 'next-yak CSS'),
+      'Expected the direct mapped action to reference its CSS diagnostic',
+    )
+
+    const actions = await registeredCodeActionsAt(document, typo.range)
+    const colorAction = actions.find((action) => action.title === "Rename to 'color'")
+
+    assert.ok(colorAction, 'Expected a mapped Rename to color quick fix')
+    const edits = workspaceEditEntries(colorAction, document)
+    assert.deepEqual(edits.map(([range, newText]) => [document.getText(range), newText]), [['colro', 'color']])
+
+    const interpolationOffset = source.indexOf('theme.accent')
+    const interpolationRange = new vscode.Range(
+      document.positionAt(interpolationOffset),
+      document.positionAt(interpolationOffset + 'theme.accent'.length),
+    )
+    assert.deepEqual(
+      provider.provideCodeActions(document, interpolationRange, {
+        diagnostics: [],
+        only: vscode.CodeActionKind.QuickFix,
+        triggerKind: vscode.CodeActionTriggerKind.Invoke,
+      }, neverCancelledToken),
+      [],
+      'Expected the next-yak CSS provider to return no action within an interpolation',
+    )
+  })
+
+  await runCase('keeps multiple CSS spelling fixes independent and skips diagnostics without fixes', async () => {
+    const source = [
+      "import { styled } from 'next-yak'",
+      'const Panel = styled.div`',
+      '  colro: red;',
+      '  bakground: blue;',
+      '  color: rgb(1, 2, 3;',
+      '`',
+    ].join('\n')
+    const document = await vscode.workspace.openTextDocument({ language: 'typescriptreact', content: source })
+    const colro = diagnosticForText(document, 'colro')
+    const bakground = diagnosticForText(document, 'bakground')
+    const unclosedValue = diagnosticForText(document, ';')
+    const provider = await createDirectCodeActionProvider(extension.extensionPath)
+
+    assert.ok(colro, 'Expected the first unknown-property diagnostic')
+    assert.ok(bakground, 'Expected the second unknown-property diagnostic')
+    assert.ok(unclosedValue, 'Expected an unclosed-value diagnostic')
+
+    const colroActions = await registeredCodeActionsAt(document, colro.range)
+    const colroAction = colroActions.find((action) => action.title === "Rename to 'color'")
+    assert.ok(colroAction, 'Expected a color rename for colro')
+    assert.deepEqual(
+      workspaceEditEntries(colroAction, document).map(([range, newText]) => [document.getText(range), newText]),
+      [['colro', 'color']],
+    )
+
+    const bakgroundActions = await registeredCodeActionsAt(document, bakground.range)
+    const bakgroundAction = bakgroundActions.find((action) => action.title === "Rename to 'background'")
+    assert.ok(bakgroundAction, 'Expected a background rename for bakground')
+    assert.deepEqual(
+      workspaceEditEntries(bakgroundAction, document).map(([range, newText]) => [document.getText(range), newText]),
+      [['bakground', 'background']],
+    )
+
+    assert.deepEqual(
+      provider.provideCodeActions(document, unclosedValue.range, {
+        diagnostics: [unclosedValue],
+        only: vscode.CodeActionKind.QuickFix,
+        triggerKind: vscode.CodeActionTriggerKind.Invoke,
+      }, neverCancelledToken),
+      [],
+      'Expected the next-yak CSS provider to return no quick fix when CSS Language Service does not offer one',
     )
   })
 

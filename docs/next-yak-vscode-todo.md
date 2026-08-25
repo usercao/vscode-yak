@@ -80,19 +80,19 @@
 
 ### 诊断
 
-- [ ] 创建 `DiagnosticCollection` 以在 next-yak 模板中显示 CSS 语法和规则诊断。
-- [ ] 调用 CSS Language Service `doValidation` 并将每个诊断范围映射回宿主文档。
-- [ ] 过滤落在插值占位区、虚拟包装前缀和虚拟包装后缀中的误报诊断。
-- [ ] 在文档变更、关闭、语言切换和扩展停用时正确更新或清理诊断集合。
-- [ ] 提供扩展设置以允许用户关闭 next-yak CSS 诊断而不影响补全。
-- [ ] 为未知属性、缺少分号、未闭合值、嵌套规则、插值相邻语法和 keyframes 添加诊断回归测试。
+- [x] 创建 `DiagnosticCollection` 以在 next-yak 模板中显示 CSS 语法和规则诊断。
+- [x] 调用 CSS Language Service `doValidation` 并将每个诊断范围映射回宿主文档。
+- [x] 过滤落在插值占位区、虚拟包装前缀和虚拟包装后缀中的误报诊断。
+- [x] 在文档变更、关闭、语言切换和扩展停用时正确更新或清理诊断集合。
+- [x] 提供扩展设置以允许用户关闭 next-yak CSS 诊断而不影响补全。
+- [x] 为未知属性、缺少分号、未闭合值、嵌套规则、插值相邻语法和 keyframes 添加诊断回归测试。
 
 ### 快速修复与代码操作
 
-- [ ] 注册 `CodeActionProvider` 以暴露 CSS Language Service 提供的属性拼写等快速修复。
-- [ ] 将 CSS code action 的文本编辑、诊断引用和 workspace edit 范围安全映射回宿主文档。
-- [ ] 拒绝任何触及插值占位区、虚拟包装区或多行不安全范围的 code action。
-- [ ] 为拼写修复、无可用修复、插值附近修复和多项修复添加 Extension Host 测试。
+- [x] 注册 `CodeActionProvider` 以暴露 CSS Language Service 提供的属性拼写等快速修复。
+- [x] 将 CSS code action 的文本编辑、诊断引用和 workspace edit 范围安全映射回宿主文档。
+- [x] 拒绝任何触及插值占位区、虚拟包装区或多行不安全范围的 code action。
+- [x] 为拼写修复、无可用修复、插值附近修复和多项修复添加 Extension Host 测试。
 
 ### 颜色能力
 
@@ -123,6 +123,12 @@
 - [ ] 在 P1 的 keyframe selector 高亮与 at-rule 名称补全稳定后，为 `keyframes` 中的 `from`、`to`、百分比步骤和 `animation` 值建立专门的补全与诊断测试。
 - [ ] 为 `styled(Component)`、泛型组件和组件链式 `.attrs(...)` 添加真实 next-yak 项目 fixture。
 - [ ] 为上游 next-yak 新增或废弃 API 建立版本兼容矩阵并在升级时更新 fixture。
+
+### next-yak 专属语义 lint
+
+- [x] 已明确扩展内置的静态 CSS 诊断/快速修复与 next-yak 专属语义 lint 的职责边界：前者使用 CSS Language Service，后者使用项目配置的官方 `eslint-plugin-yak`。
+- [x] 已在 README 说明如何通过 VS Code ESLint 扩展和 `eslint-plugin-yak` 获得嵌套选择器、`:global()` 迁移、模板表达式分号和 runtime style condition 等 next-yak 规则。
+- [ ] 仅当产品目标明确要求在没有 ESLint 配置时也内置 next-yak 语义诊断，才与上游协作抽取稳定的分析 API；不要在扩展中加载工作区 ESLint 配置或依赖插件内部 rule 模块。
 
 ### 模板识别与高亮一致性
 
@@ -212,6 +218,7 @@
 - [x] 当前扩展不会通过全局关闭 `typescriptreact` 或 `javascriptreact` 的 Emmet 来解决局部模板候选冲突。
 - [x] 当前扩展优先保持独立 VS Code 扩展架构，而不要求用户配置工作区 TypeScript 或 tsserver plugin。
 - [x] 当前扩展将补全的 import 来源判断与高亮的 TextMate 静态匹配视为两个不同可靠性层级。
+- [x] 当前扩展不运行工作区 ESLint 或内嵌 `eslint-plugin-yak`；由 VS Code ESLint 扩展根据用户项目配置负责 next-yak 专属语义 lint、suggestion 与 fix-on-save。
 
 ## 完成规则
 

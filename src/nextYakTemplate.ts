@@ -144,6 +144,31 @@ export class NextYakTemplateCache {
       return undefined
     }
 
+    const analysis = this.getAnalysis(document)
+
+    return findNextYakTemplateInAnalysis(document.source, cursorOffset, analysis)
+  }
+
+  findTemplates(document: NextYakTemplateDocument): readonly NextYakTemplate[] {
+    const analysis = this.getAnalysis(document)
+
+    return analysis.taggedTemplates.flatMap((taggedTemplate) => {
+      const template = createTemplate(
+        document.source,
+        analysis.sourceFile,
+        taggedTemplate.node,
+        taggedTemplate.tag,
+      )
+
+      return template ? [template] : []
+    })
+  }
+
+  invalidateDocument(uri: string): void {
+    this.analyses.delete(uri)
+  }
+
+  private getAnalysis(document: NextYakTemplateDocument): CachedNextYakTemplateAnalysis {
     let analysis = this.analyses.get(document.uri)
 
     if (!analysis || !matchesDocument(analysis, document)) {
@@ -151,11 +176,7 @@ export class NextYakTemplateCache {
       this.analyses.set(document.uri, analysis)
     }
 
-    return findNextYakTemplateInAnalysis(document.source, cursorOffset, analysis)
-  }
-
-  invalidateDocument(uri: string): void {
-    this.analyses.delete(uri)
+    return analysis
   }
 }
 
@@ -503,27 +524,34 @@ function createTemplate(
   sourceFile: ts.SourceFile,
   taggedTemplate: ts.TaggedTemplateExpression,
   tag: NextYakTag,
-  cursorOffset: number,
+  cursorOffset?: number,
 ): NextYakTemplate | undefined {
   const templateStart = taggedTemplate.template.getStart(sourceFile)
   const bodyStart = templateStart + 1
   const hasClosingBacktick = source[taggedTemplate.template.end - 1] === '`'
   const templateEnd = hasClosingBacktick ? taggedTemplate.template.end - 1 : taggedTemplate.template.end
 
-  if (cursorOffset < bodyStart || cursorOffset > templateEnd) {
+  if (cursorOffset !== undefined && (cursorOffset < bodyStart || cursorOffset > templateEnd)) {
     return undefined
   }
 
   const scannedTemplate = scanTemplate(source, bodyStart, templateEnd)
   const bodyEnd = scannedTemplate.bodyEnd
-  const cursorInBody = cursorOffset - bodyStart
 
-  if (scannedTemplate.unterminatedInterpolationStart !== undefined && cursorInBody >= scannedTemplate.unterminatedInterpolationStart) {
+  if (cursorOffset === undefined && scannedTemplate.unterminatedInterpolationStart !== undefined) {
     return undefined
   }
 
-  if (scannedTemplate.interpolations.some((range) => isOffsetInRange(cursorInBody, range))) {
-    return undefined
+  if (cursorOffset !== undefined) {
+    const cursorInBody = cursorOffset - bodyStart
+
+    if (scannedTemplate.unterminatedInterpolationStart !== undefined && cursorInBody >= scannedTemplate.unterminatedInterpolationStart) {
+      return undefined
+    }
+
+    if (scannedTemplate.interpolations.some((range) => isOffsetInRange(cursorInBody, range))) {
+      return undefined
+    }
   }
 
   const body = source.slice(bodyStart, bodyEnd)

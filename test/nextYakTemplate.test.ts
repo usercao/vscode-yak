@@ -411,6 +411,47 @@ describe('findNextYakTemplate', () => {
 })
 
 describe('NextYakTemplateCache', () => {
+  it('lists all recognized templates from one cached semantic analysis', () => {
+    const cache = new NextYakTemplateCache()
+    const source = [
+      "import { css, styled } from 'next-yak'",
+      'const First = styled.div`color: red;`',
+      'const Second = css`background: blue;`',
+    ].join('\n')
+    const document = {
+      fileName: '/fixture.tsx',
+      languageId: 'typescriptreact',
+      source,
+      uri: 'file:///fixture.tsx',
+      version: 1,
+    }
+
+    createProgramSpy.mockClear()
+    expect(cache.findTemplates(document).map((template) => template.tag)).toEqual(['styled', 'css'])
+    expect(cache.findTemplates(document)).toHaveLength(2)
+    expect(createProgramSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips a template with an unfinished interpolation while retaining other templates', () => {
+    const cache = new NextYakTemplateCache()
+    const source = [
+      "import { css, styled } from 'next-yak'",
+      'const First = styled.div`color: ${theme.',
+      'const Second = css`background: blue;`',
+    ].join('\n')
+
+    const templates = cache.findTemplates({
+      fileName: '/fixture.tsx',
+      languageId: 'typescriptreact',
+      source,
+      uri: 'file:///fixture.tsx',
+      version: 1,
+    })
+
+    expect(templates.map((template) => template.tag)).toEqual(['css'])
+    expect(templates[0].maskedBody).toContain('background: blue;')
+  })
+
   it('reuses the semantic analysis for repeated completion requests at the same URI and version', () => {
     const cache = new NextYakTemplateCache()
     const request = templateCacheRequest(styledSource('styled.div'), 1)

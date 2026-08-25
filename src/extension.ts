@@ -3,6 +3,9 @@ import {
   getDefaultCSSDataProvider,
   getCSSLanguageService,
   type CompletionItem as CssCompletionItem,
+  type CodeAction as CssCodeAction,
+  type CodeActionContext as CssCodeActionContext,
+  type Diagnostic as CssDiagnostic,
   type Hover as CssHover,
   type IAtDirectiveData,
   type IPropertyData,
@@ -15,6 +18,11 @@ import {
   getNextYakCssHover,
   type VirtualCssDocument,
 } from './nextYakHover'
+import {
+  getNextYakCssDiagnostics,
+  type NextYakCssDiagnostic,
+} from './nextYakDiagnostics'
+import { mapVirtualCssCodeAction } from './nextYakCodeActions'
 import {
   createVirtualCssText,
   getAtRuleCompletionContext,
@@ -67,19 +75,46 @@ const nextYakDocumentSelector: vscode.DocumentSelector = [
   { language: 'typescript' },
   { language: 'typescriptreact' },
 ]
+const nextYakLanguageIds = new Set(['javascript', 'javascriptreact', 'typescript', 'typescriptreact'])
 const cssCompletionTriggerCharacters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ:-@'.split('')
+const nextYakCssDiagnosticSource = 'next-yak CSS'
+const nextYakCssValidateConfiguration = 'nextYak.css.validate'
 
 export function activate(context: vscode.ExtensionContext) {
   const templateCache = new NextYakTemplateCache()
   const completionProvider = new NextYakCssCompletionProvider(templateCache)
   const hoverProvider = new NextYakCssHoverProvider(templateCache)
+  const diagnostics = vscode.languages.createDiagnosticCollection('next-yak CSS')
+  const diagnosticProvider = new NextYakCssDiagnosticProvider(templateCache, diagnostics)
+  const codeActionProvider = new NextYakCssCodeActionProvider(templateCache)
+
+  const updateDiagnostics = (document: vscode.TextDocument) => {
+    diagnosticProvider.updateDocument(document)
+  }
+
+  const refreshDiagnostics = () => {
+    for (const document of vscode.workspace.textDocuments) {
+      updateDiagnostics(document)
+    }
+  }
 
   context.subscriptions.push(
+    diagnostics,
     vscode.workspace.onDidChangeTextDocument((event) => {
       templateCache.invalidateDocument(event.document.uri.toString())
+      updateDiagnostics(event.document)
     }),
     vscode.workspace.onDidCloseTextDocument((document) => {
       templateCache.invalidateDocument(document.uri.toString())
+      diagnostics.delete(document.uri)
+    }),
+    vscode.workspace.onDidOpenTextDocument((document) => {
+      updateDiagnostics(document)
+    }),
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration(nextYakCssValidateConfiguration)) {
+        refreshDiagnostics()
+      }
     }),
     vscode.languages.registerCompletionItemProvider(
       nextYakDocumentSelector,
@@ -87,7 +122,14 @@ export function activate(context: vscode.ExtensionContext) {
       ...cssCompletionTriggerCharacters,
     ),
     vscode.languages.registerHoverProvider(nextYakDocumentSelector, hoverProvider),
+    vscode.languages.registerCodeActionsProvider(
+      nextYakDocumentSelector,
+      codeActionProvider,
+      { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] },
+    ),
   )
+
+  refreshDiagnostics()
 }
 
 export class NextYakCssCompletionProvider implements vscode.CompletionItemProvider {
@@ -199,6 +241,234 @@ export class NextYakCssHoverProvider implements vscode.HoverProvider {
       new vscode.Range(document.positionAt(hover.range.start), document.positionAt(hover.range.end)),
     )
   }
+}
+
+export class NextYakCssDiagnosticProvider {
+  constructor(
+    private readonly templateCache: NextYakTemplateCache,
+    private readonly diagnostics: vscode.DiagnosticCollection,
+  ) {}
+
+  updateDocument(document: vscode.TextDocument): void {
+    if (!isNextYakDocument(document) || !isCssValidationEnabled(document.uri)) {
+      this.diagnostics.delete(document.uri)
+      return
+    }
+
+    const source = document.getText()
+    const templates = this.templateCache.findTemplates({
+      fileName: document.fileName,
+      languageId: document.languageId,
+      source,
+      uri: document.uri.toString(),
+      version: document.version,
+    })
+    const mappedDiagnostics = templates.flatMap((template) => {
+      const virtualCss = createVirtualCssDocument(document, template)
+
+      return getNextYakCssDiagnostics(cssLanguageService, template, virtualCss)
+    })
+
+    if (mappedDiagnostics.length === 0) {
+      this.diagnostics.delete(document.uri)
+      return
+    }
+
+    this.diagnostics.set(
+      document.uri,
+      mappedDiagnostics.map((diagnostic) => toDiagnostic(document, diagnostic)),
+    )
+  }
+}
+
+export class NextYakCssCodeActionProvider implements vscode.CodeActionProvider {
+  constructor(private readonly templateCache = new NextYakTemplateCache()) {}
+
+  provideCodeActions(
+    document: vscode.TextDocument,
+    range: vscode.Range,
+    context: vscode.CodeActionContext,
+    token: vscode.CancellationToken,
+  ): vscode.CodeAction[] | undefined {
+    if (token.isCancellationRequested || !isCssValidationEnabled(document.uri)) {
+      return undefined
+    }
+
+    const source = document.getText()
+    const templates = this.templateCache.findTemplates({
+      fileName: document.fileName,
+      languageId: document.languageId,
+      source,
+      uri: document.uri.toString(),
+      version: document.version,
+    })
+    const actions: vscode.CodeAction[] = []
+
+    for (const template of templates) {
+      if (!isRangeInsideTemplate(range, document, template)) {
+        continue
+      }
+
+      const virtualCss = createVirtualCssDocument(document, template)
+      const mappedDiagnostics = getNextYakCssDiagnostics(cssLanguageService, template, virtualCss)
+      const diagnostics = getMatchingDiagnostics(document, mappedDiagnostics, context.diagnostics)
+
+      if (diagnostics.length === 0) {
+        continue
+      }
+
+      const stylesheet = cssLanguageService.parseStylesheet(virtualCss.document)
+      const virtualRange = getVirtualTemplateRange(template, virtualCss)
+      const cssContext: CssCodeActionContext = {
+        diagnostics: diagnostics.map(({ virtualDiagnostic }) => virtualDiagnostic),
+      }
+      const cssActions = cssLanguageService.doCodeActions2(
+        virtualCss.document,
+        virtualRange,
+        cssContext,
+        stylesheet,
+      )
+
+      for (const cssAction of cssActions) {
+        const mappedAction = mapVirtualCssCodeAction(cssAction, template, virtualCss)
+        const actionDiagnostics = getActionDiagnostics(cssAction, diagnostics)
+
+        if (!mappedAction || actionDiagnostics.length === 0) {
+          continue
+        }
+
+        const action = new vscode.CodeAction(mappedAction.title, toCodeActionKind(mappedAction.kind))
+        const edit = new vscode.WorkspaceEdit()
+
+        for (const textEdit of mappedAction.edits) {
+          edit.replace(
+            document.uri,
+            new vscode.Range(
+              document.positionAt(textEdit.range.start),
+              document.positionAt(textEdit.range.end),
+            ),
+            textEdit.newText,
+          )
+        }
+
+        action.diagnostics = actionDiagnostics
+        action.edit = edit
+        action.isPreferred = mappedAction.isPreferred
+        actions.push(action)
+      }
+    }
+
+    return token.isCancellationRequested ? undefined : actions
+  }
+}
+
+function isNextYakDocument(document: vscode.TextDocument) {
+  return nextYakLanguageIds.has(document.languageId)
+}
+
+function isCssValidationEnabled(resource: vscode.Uri) {
+  return vscode.workspace.getConfiguration('nextYak', resource).get<boolean>('css.validate', true)
+}
+
+function toDiagnostic(document: vscode.TextDocument, mappedDiagnostic: NextYakCssDiagnostic): vscode.Diagnostic {
+  const diagnostic = new vscode.Diagnostic(
+    new vscode.Range(
+      document.positionAt(mappedDiagnostic.range.start),
+      document.positionAt(mappedDiagnostic.range.end),
+    ),
+    mappedDiagnostic.diagnostic.message,
+    toDiagnosticSeverity(mappedDiagnostic.diagnostic),
+  )
+
+  diagnostic.code = mappedDiagnostic.diagnostic.code
+  diagnostic.source = nextYakCssDiagnosticSource
+
+  return diagnostic
+}
+
+function toDiagnosticSeverity(diagnostic: CssDiagnostic) {
+  switch (diagnostic.severity) {
+    case 1:
+      return vscode.DiagnosticSeverity.Error
+    case 2:
+      return vscode.DiagnosticSeverity.Warning
+    case 3:
+      return vscode.DiagnosticSeverity.Information
+    case 4:
+      return vscode.DiagnosticSeverity.Hint
+    default:
+      return vscode.DiagnosticSeverity.Warning
+  }
+}
+
+function getMatchingDiagnostics(
+  document: vscode.TextDocument,
+  mappedDiagnostics: readonly NextYakCssDiagnostic[],
+  diagnostics: readonly vscode.Diagnostic[],
+) {
+  return mappedDiagnostics.flatMap((mappedDiagnostic) => {
+    const sourceRange = new vscode.Range(
+      document.positionAt(mappedDiagnostic.range.start),
+      document.positionAt(mappedDiagnostic.range.end),
+    )
+    const matchingDiagnostic = diagnostics.find((diagnostic) => (
+      diagnostic.source === nextYakCssDiagnosticSource
+      && diagnostic.code === mappedDiagnostic.diagnostic.code
+      && diagnostic.message === mappedDiagnostic.diagnostic.message
+      && diagnostic.range.isEqual(sourceRange)
+    ))
+
+    return matchingDiagnostic ? [{ sourceDiagnostic: matchingDiagnostic, virtualDiagnostic: mappedDiagnostic.diagnostic }] : []
+  })
+}
+
+function getActionDiagnostics(
+  action: CssCodeAction,
+  diagnostics: readonly { sourceDiagnostic: vscode.Diagnostic; virtualDiagnostic: CssDiagnostic }[],
+) {
+  if (!action.diagnostics || action.diagnostics.length === 0) {
+    return []
+  }
+
+  return diagnostics.flatMap(({ sourceDiagnostic, virtualDiagnostic }) => (
+    action.diagnostics?.some((actionDiagnostic) => isSameCssDiagnostic(actionDiagnostic, virtualDiagnostic))
+      ? [sourceDiagnostic]
+      : []
+  ))
+}
+
+function isSameCssDiagnostic(left: CssDiagnostic, right: CssDiagnostic) {
+  return left.code === right.code
+    && left.message === right.message
+    && left.range.start.line === right.range.start.line
+    && left.range.start.character === right.range.start.character
+    && left.range.end.line === right.range.end.line
+    && left.range.end.character === right.range.end.character
+}
+
+function getVirtualTemplateRange(template: NextYakTemplate, virtualCss: VirtualCssDocument): CssRange {
+  const start = virtualCss.prefixLength
+  const end = start + template.maskedBody.length
+
+  return {
+    start: virtualCss.document.positionAt(start),
+    end: virtualCss.document.positionAt(end),
+  }
+}
+
+function isRangeInsideTemplate(
+  range: vscode.Range,
+  document: vscode.TextDocument,
+  template: NextYakTemplate,
+) {
+  const start = document.offsetAt(range.start)
+  const end = document.offsetAt(range.end)
+
+  return start >= template.bodyStart && end <= template.bodyEnd
+}
+
+function toCodeActionKind(kind: string | undefined) {
+  return kind === 'quickfix' ? vscode.CodeActionKind.QuickFix : undefined
 }
 
 function createVirtualCssDocument(

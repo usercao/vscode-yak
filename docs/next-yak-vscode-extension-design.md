@@ -180,6 +180,16 @@ const B = styled.div`...` // 不应当当作 next-yak
 - `@vscode/vsce` 或 `@vscode/vsce` 的替代打包工具：发布 VSIX。
 - `@vscode/textmate`：仅当扩展需要在测试中直接断言 grammar token 时使用。
 
+## CSS 诊断与 next-yak 语义 lint 的边界
+
+扩展内置的诊断和代码操作只处理经过 AST 识别、且能完整映射回宿主文档静态区间的 CSS：CSS 语法错误、标准 CSS lint 规则和 CSS Language Service 提供的安全修复（例如未知属性的拼写建议）。`DiagnosticCollection` 在打开、修改、关闭、语言模式切换和 `nextYak.css.validate` 配置变化时更新；该设置默认为启用，按资源生效，且不影响补全或 hover。
+
+诊断映射拒绝插值占位、虚拟包装前缀/后缀与零长度范围。对于 CSS Language Service 将完整插值值的空白掩码误判为缺值、并把范围锚定到紧邻分号的已知情况，扩展也会过滤该 `css-propertyvalueexpected` 误报。代码操作只接受当前虚拟 CSS 文档的非重叠单行文本编辑；触及插值或包装区、跨行、跨文档、带命令或无法完整映射的 action 一律拒绝。
+
+next-yak 特有语义不应由扩展内嵌 ESLint rule 实现。官方 `eslint-plugin-yak` 已提供嵌套选择器 `&`、`:global()` 弃用、模板表达式分号和 runtime style condition 等规则；用户在项目中安装并配置它后，由 VS Code ESLint 扩展显示诊断、suggestion、自动修复和 fix-on-save。这样既保留项目对规则启用状态和严重级别的控制，也不会让本扩展动态加载工作区 ESLint 配置、复制上游规则或依赖其内部模块。
+
+若未来产品目标要求没有 ESLint 配置时也显示 next-yak 语义诊断，应先与上游协作导出稳定的分析 API，再评估独立集成；在此之前，扩展不以 ESLint 作为运行时依赖。
+
 ## 扩展清单结构
 
 建议的初始结构如下：
