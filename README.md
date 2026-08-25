@@ -87,7 +87,7 @@ The extension caches TypeScript template analysis by document URI and version, i
 
 ## Current Scope
 
-Completion detects direct, aliased, and namespace imports from `next-yak` through the TypeScript AST, ignores type-only imports and locally shadowed identifiers, and supports static string element access such as `styled['div']`. Dynamic tag expressions are intentionally ignored. Syntax highlighting remains TextMate-pattern based, so a visually highlighted template is not itself proof that its binding comes from `next-yak`.
+Completion detects direct, aliased, and namespace imports from `next-yak` through the TypeScript AST, ignores type-only imports and locally shadowed identifiers, and supports static string element access such as `styled['div']`. Dynamic tag expressions are intentionally ignored. The TextMate grammar highlights explicit `styled`, `css`, `globalStyle`, and `keyframes` structures, including generics, `.attrs(...)`, static element access, namespaces, and CSS props. A lightweight static tag decoration makes those pattern matches easier to identify without parsing imports or replacing CSS/TypeScript token colors; aliases and actual import ownership remain AST-provider concerns. The grammar embeds standard `source.css` only and does not promise Sass, SCSS, or Less syntax.
 
 Hover uses the same static template recognition and virtual CSS mapping as completion. It intentionally returns no hover within `${...}` interpolation, synthetic virtual CSS wrappers, unsupported keyframe step selectors, or CSS positions for which the language service has no documentation.
 

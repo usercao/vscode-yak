@@ -18,9 +18,12 @@ vi.mock('typescript', async (importOriginal) => {
 import {
   createVirtualCssText,
   findNextYakTemplate,
+  findStaticNextYakTemplates,
   getAtRuleCompletionContext,
   getSelectorCompletionContext,
+  getStaticTemplateBodyRanges,
   mapVirtualRangeToSourceOffsets,
+  NextYakStaticTemplateCache,
   NextYakTemplateCache,
 } from '../src/nextYakTemplate'
 
@@ -407,6 +410,66 @@ describe('findNextYakTemplate', () => {
 
     expect(unfinishedInterpolation.template).toBeUndefined()
     expect(unfinishedTemplate.template?.tag).toBe('styled')
+  })
+})
+
+describe('static next-yak template recognition', () => {
+  it('recognizes explicit template shapes without reading imports', () => {
+    const source = [
+      'const Generic = styled.div<Props>`color: red;`',
+      'const Attrs = styled.div.attrs({ role: createRole("region") })`background: blue;`',
+      "const Element = styled['section']`border-color: black;`",
+      'const Namespaced = yak.styled.a`outline-color: white;`',
+      'const Global = yak.globalStyle`color: purple;`',
+      'const Animation = yak.keyframes`from { opacity: 0; }`',
+      'const CssProp = <section css={yak.css`display: grid;`} />',
+      'const Alias = s.div`color: orange;`',
+    ].join('\n')
+    const templates = findStaticNextYakTemplates(source, 'typescriptreact', '/fixture.tsx')
+
+    expect(templates.map((template) => template.tag)).toEqual([
+      'styled',
+      'styled',
+      'styled',
+      'styled',
+      'globalStyle',
+      'keyframes',
+      'css',
+    ])
+    expect(templates.map((template) => source.slice(template.bodyStart, template.bodyEnd))).not.toContain('color: orange;')
+  })
+
+  it('returns only static template body ranges for decorations', () => {
+    const source = [
+      'const Panel = yak.styled.div`',
+      '  color: ${theme.accent};',
+      '  background: blue;',
+      '`',
+    ].join('\n')
+    const [template] = findStaticNextYakTemplates(source, 'typescriptreact', '/fixture.tsx')
+    const staticText = getStaticTemplateBodyRanges(template).map((range) => source.slice(range.start, range.end)).join('')
+
+    expect(staticText).toContain('color: ')
+    expect(staticText).toContain('background: blue;')
+    expect(staticText).not.toContain('theme.accent')
+    expect(staticText).not.toContain('${')
+  })
+
+  it('caches static recognition independently from import binding analysis', () => {
+    const cache = new NextYakStaticTemplateCache()
+    const document = {
+      fileName: '/fixture.tsx',
+      languageId: 'typescriptreact',
+      source: 'const Panel = yak.styled.div`color: red;`',
+      uri: 'file:///fixture.tsx',
+      version: 1,
+    }
+
+    expect(cache.findTemplates(document).map((template) => template.tag)).toEqual(['styled'])
+    expect(cache.findTemplates(document)).toHaveLength(1)
+    cache.invalidateDocument(document.uri)
+    expect(cache.findTemplates({ ...document, source: 'const Panel = yak.css`color: red;`', version: 2 })
+      .map((template) => template.tag)).toEqual(['css'])
   })
 })
 

@@ -132,11 +132,11 @@
 
 ### 模板识别与高亮一致性
 
-- [ ] 使 TextMate grammar 支持已被 AST 补全识别但尚未高亮的 next-yak 模板形态。
-- [ ] 为 `styled.div<Props>`、`.attrs(...)`、命名空间 API 和 CSS prop 形式验证高亮 scope 是否与补全范围一致。
-- [ ] 在不依赖 import 解析的前提下使用 semantic tokens 或 decorations 降低 TextMate 静态误高亮的可见影响。
-- [ ] 为 TypeScript、TSX、JavaScript 和 JSX 的 grammar token 化结果建立快照或 scope 回归测试。
-- [ ] 确保 TextMate grammar 继续使用 CSS scope 而不承诺 Sass、SCSS 或 Less 的编译支持。
+- [x] 使 TextMate grammar 支持已被 AST 补全识别且具有显式静态结构的 next-yak 模板形态；别名继续由 AST provider 判断。
+- [x] 为 `styled.div<Props>`、`.attrs(...)`、命名空间 API 和 CSS prop 形式验证高亮 scope 是否与补全范围一致。
+- [x] 在不依赖 import 解析的前提下使用 decoration 标示静态 TextMate pattern match，不覆盖 CSS/TypeScript token 前景色。
+- [x] 为 TypeScript、TSX、JavaScript 和 JSX 的 grammar token 化结果建立 scope 回归测试。
+- [x] 确保 TextMate grammar 继续使用 CSS scope 而不承诺 Sass、SCSS 或 Less 的编译支持。
 
 ### 项目级 CSS 智能能力
 

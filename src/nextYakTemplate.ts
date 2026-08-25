@@ -13,6 +13,8 @@ export interface NextYakTemplate {
   interpolations: readonly OffsetRange[]
   maskedBody: string
   tag: NextYakTag
+  tagEnd: number
+  tagStart: number
 }
 
 export interface VirtualCssText {
@@ -80,6 +82,14 @@ interface CachedNextYakTemplateAnalysis {
   languageId: string
   sourceFile: ts.SourceFile
   taggedTemplates: readonly TaggedNextYakTemplate[]
+  version: number
+}
+
+interface CachedStaticNextYakTemplateAnalysis {
+  fileName: string
+  languageId: string
+  source: string
+  templates: readonly NextYakTemplate[]
   version: number
 }
 
@@ -180,6 +190,35 @@ export class NextYakTemplateCache {
   }
 }
 
+export class NextYakStaticTemplateCache {
+  private readonly analyses = new Map<string, CachedStaticNextYakTemplateAnalysis>()
+
+  clear(): void {
+    this.analyses.clear()
+  }
+
+  findTemplates(document: NextYakTemplateDocument): readonly NextYakTemplate[] {
+    let analysis = this.analyses.get(document.uri)
+
+    if (!analysis || !matchesStaticDocument(analysis, document)) {
+      analysis = {
+        fileName: document.fileName,
+        languageId: document.languageId,
+        source: document.source,
+        templates: findStaticNextYakTemplates(document.source, document.languageId, document.fileName),
+        version: document.version,
+      }
+      this.analyses.set(document.uri, analysis)
+    }
+
+    return analysis.templates
+  }
+
+  invalidateDocument(uri: string): void {
+    this.analyses.delete(uri)
+  }
+}
+
 export function findNextYakTemplate(
   source: string,
   cursorOffset: number,
@@ -195,6 +234,32 @@ export function findNextYakTemplate(
   return findNextYakTemplateInAnalysis(source, cursorOffset, analysis)
 }
 
+export function findStaticNextYakTemplates(
+  source: string,
+  languageId: string,
+  fileName: string,
+): readonly NextYakTemplate[] {
+  const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, toScriptKind(languageId))
+  const templates: NextYakTemplate[] = []
+
+  const visit = (node: ts.Node) => {
+    if (ts.isTaggedTemplateExpression(node)) {
+      const tag = getStaticNextYakTag(node.tag)
+      const template = tag && createTemplate(source, sourceFile, node, tag)
+
+      if (template) {
+        templates.push(template)
+      }
+    }
+
+    ts.forEachChild(node, visit)
+  }
+
+  visit(sourceFile)
+
+  return templates
+}
+
 function matchesDocument(
   analysis: CachedNextYakTemplateAnalysis,
   document: NextYakTemplateDocument,
@@ -203,6 +268,16 @@ function matchesDocument(
     && analysis.languageId === document.languageId
     && analysis.fileName === document.fileName
     && analysis.sourceFile.text === document.source
+}
+
+function matchesStaticDocument(
+  analysis: CachedStaticNextYakTemplateAnalysis,
+  document: NextYakTemplateDocument,
+) {
+  return analysis.version === document.version
+    && analysis.languageId === document.languageId
+    && analysis.fileName === document.fileName
+    && analysis.source === document.source
 }
 
 function createNextYakTemplateAnalysis(
@@ -323,6 +398,27 @@ export function createVirtualCssText(template: NextYakTemplate): VirtualCssText 
     text: `${prefix}${template.maskedBody}\n}`,
     prefixLength: prefix.length,
   }
+}
+
+export function getStaticTemplateBodyRanges(template: NextYakTemplate): OffsetRange[] {
+  const ranges: OffsetRange[] = []
+  let start = template.bodyStart
+
+  for (const interpolation of template.interpolations) {
+    const end = template.bodyStart + interpolation.start
+
+    if (end > start) {
+      ranges.push({ start, end })
+    }
+
+    start = template.bodyStart + interpolation.end
+  }
+
+  if (template.bodyEnd > start) {
+    ranges.push({ start, end: template.bodyEnd })
+  }
+
+  return ranges
 }
 
 export function mapVirtualRangeToSourceOffsets(
@@ -562,6 +658,8 @@ function createTemplate(
     interpolations: scannedTemplate.interpolations,
     maskedBody: maskInterpolations(body, scannedTemplate.interpolations),
     tag,
+    tagEnd: templateStart,
+    tagStart: taggedTemplate.tag.getStart(sourceFile),
   }
 }
 
@@ -636,11 +734,7 @@ function getNextYakTag(
   }
 
   if (binding.kind === 'named') {
-    if (binding.tag === 'styled') {
-      return tagPath.properties.length > 0 || tagPath.hasCall ? 'styled' : undefined
-    }
-
-    return tagPath.properties.length === 0 && !tagPath.hasCall ? binding.tag : undefined
+    return getNextYakTagFromPath(binding.tag, tagPath.properties, tagPath.hasCall)
   }
 
   const [tagName, ...remainingProperties] = tagPath.properties
@@ -649,11 +743,37 @@ function getNextYakTag(
     return undefined
   }
 
-  if (tagName === 'styled') {
-    return remainingProperties.length > 0 || tagPath.hasCall ? 'styled' : undefined
+  return getNextYakTagFromPath(tagName, remainingProperties, tagPath.hasCall)
+}
+
+function getStaticNextYakTag(expression: ts.Expression): NextYakTag | undefined {
+  const tagPath = getTagPath(expression)
+
+  if (!tagPath) {
+    return undefined
   }
 
-  return remainingProperties.length === 0 && !tagPath.hasCall ? tagName : undefined
+  if (isNextYakTag(tagPath.root.text)) {
+    return getNextYakTagFromPath(tagPath.root.text, tagPath.properties, tagPath.hasCall)
+  }
+
+  const [tagName, ...remainingProperties] = tagPath.properties
+
+  return isNextYakTag(tagName)
+    ? getNextYakTagFromPath(tagName, remainingProperties, tagPath.hasCall)
+    : undefined
+}
+
+function getNextYakTagFromPath(
+  tag: NextYakTag,
+  properties: readonly string[],
+  hasCall: boolean,
+): NextYakTag | undefined {
+  if (tag === 'styled') {
+    return properties.length > 0 || hasCall ? 'styled' : undefined
+  }
+
+  return properties.length === 0 && !hasCall ? tag : undefined
 }
 
 function getTagPath(node: ts.Node): TagPath | undefined {

@@ -81,7 +81,9 @@ const rules = yak.css`...`
 
 grammar 在标准模板标签中识别 CSS 内容，嵌入现成的 CSS grammar，并将 `${...}` 内部重新交给 JavaScript 或 TypeScript grammar。扩展应声明 `embeddedLanguages`，使括号匹配、注释和基础编辑器行为能够识别模板内的 CSS。
 
-TextMate grammar 只适合静态、标准形式的标签识别。它不能可靠判断导入来源、局部变量遮蔽或复杂的表达式，因此高亮层可以覆盖 `styled`、`css`、`globalStyle`、`keyframes` 等常见写法，但不能作为语义判定的唯一依据。
+TextMate grammar 只适合静态、标准形式的标签识别。它不能可靠判断导入来源、局部变量遮蔽或别名，因此高亮层可以覆盖显式 `styled`、`css`、`globalStyle`、`keyframes` 及其泛型、`.attrs(...)`、静态 element access、namespace、CSS prop 等常见结构，但不能作为语义判定的唯一依据。扩展还会对这些静态匹配的 tag 添加低影响 decoration，帮助用户辨认 pattern-based 高亮；该 decoration 不读取 import、不改写 CSS 或 TypeScript token 前景色，也不把别名视为已确认的 next-yak API。
+
+grammar 始终嵌入标准 `source.css`。它支持 next-yak 的现代标准 CSS nesting、媒体查询和 keyframes，但不构成 Sass、SCSS 或 Less 的编译、补全或语法支持承诺。
 
 ## 补全方案：AST 加虚拟 CSS 文档
 

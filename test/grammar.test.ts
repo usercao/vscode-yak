@@ -89,6 +89,169 @@ function scopesAtOffset(line: string, tokens: readonly { endIndex: number; scope
 
 describe('next-yak TextMate grammar', () => {
   it.each([
+    ['TypeScript', 'source.ts'],
+    ['TypeScript React', 'source.tsx'],
+    ['JavaScript', 'source.js'],
+    ['JavaScript React', 'source.js.jsx'],
+  ])('highlights static attrs, namespace, and keyframes forms in %s', async (_, scopeName) => {
+    const grammar = await loadGrammar(scopeName)
+
+    if (!grammar) {
+      throw new Error(`Unable to load ${scopeName} grammar`)
+    }
+
+    let ruleStack = INITIAL
+    const lines = [
+      "import { globalStyle, keyframes, styled } from 'next-yak'",
+      "import * as yak from 'next-yak'",
+      'const Attrs = styled.div.attrs({ role: createRole("region") })`',
+      '  color: red;',
+      '`',
+      'const Namespaced = yak.styled.a`',
+      '  background: blue;',
+      '`',
+      'const Global = yak.globalStyle`',
+      '  border-color: black;',
+      '`',
+      'const Animation = yak.keyframes`',
+      '  from { opacity: 0; }',
+      '`',
+      'const after = true',
+    ]
+    const tokenizedLines = lines.map((line) => {
+      const result = grammar.tokenizeLine(line, ruleStack)
+      ruleStack = result.ruleStack
+      return result.tokens
+    })
+
+    for (const [lineIndex, property] of [
+      [3, 'color'],
+      [6, 'background'],
+      [9, 'border-color'],
+      [12, 'opacity'],
+    ] as const) {
+      const scopes = scopesAtOffset(lines[lineIndex], tokenizedLines[lineIndex], lines[lineIndex].indexOf(property))
+
+      expect(scopes).toContain('support.type.property-name.css')
+      expect(scopes).toContain('source.css')
+      expect(scopes).not.toContain('source.css.scss')
+      expect(scopes).not.toContain('source.css.less')
+    }
+    expect(scopesAtOffset(lines[14], tokenizedLines[14], lines[14].indexOf('const'))).not.toContain('source.css')
+  })
+
+  it.each([
+    ['TypeScript', 'source.ts'],
+    ['TypeScript React', 'source.tsx'],
+  ])('highlights generic styled and static element-access templates in %s', async (_, scopeName) => {
+    const grammar = await loadGrammar(scopeName)
+
+    if (!grammar) {
+      throw new Error(`Unable to load ${scopeName} grammar`)
+    }
+
+    let ruleStack = INITIAL
+    const lines = [
+      "import { styled } from 'next-yak'",
+      'type Props = { tone: string }',
+      'const Generic = styled.div<Props>`',
+      '  color: red;',
+      '`',
+      "const Element = styled['section']`",
+      '  background: blue;',
+      '`',
+      'const Callable = styled(Component).attrs<Props>({ role: "presentation" })`',
+      '  outline-color: black;',
+      '`',
+      'const after = true',
+    ]
+    const tokenizedLines = lines.map((line) => {
+      const result = grammar.tokenizeLine(line, ruleStack)
+      ruleStack = result.ruleStack
+      return result.tokens
+    })
+
+    for (const [lineIndex, property] of [
+      [3, 'color'],
+      [6, 'background'],
+      [9, 'outline-color'],
+    ] as const) {
+      expect(scopesAtOffset(lines[lineIndex], tokenizedLines[lineIndex], lines[lineIndex].indexOf(property))).toContain(
+        'support.type.property-name.css',
+      )
+    }
+    expect(scopesAtOffset(lines[11], tokenizedLines[11], lines[11].indexOf('const'))).not.toContain('source.css')
+  })
+
+  it.each([
+    ['TypeScript React', 'source.tsx'],
+    ['JavaScript React', 'source.js.jsx'],
+  ])('highlights direct and namespace css prop templates in %s', async (_, scopeName) => {
+    const grammar = await loadGrammar(scopeName)
+
+    if (!grammar) {
+      throw new Error(`Unable to load ${scopeName} grammar`)
+    }
+
+    let ruleStack = INITIAL
+    const lines = [
+      "import { css } from 'next-yak'",
+      "import * as yak from 'next-yak'",
+      'const Direct = <section css={css`',
+      '  color: red;',
+      '`} />',
+      'const Namespaced = <section css={yak.css`',
+      '  background: blue;',
+      '`} />',
+      'const after = true',
+    ]
+    const tokenizedLines = lines.map((line) => {
+      const result = grammar.tokenizeLine(line, ruleStack)
+      ruleStack = result.ruleStack
+      return result.tokens
+    })
+
+    expect(scopesAtOffset(lines[3], tokenizedLines[3], lines[3].indexOf('color'))).toContain(
+      'support.type.property-name.css',
+    )
+    expect(scopesAtOffset(lines[6], tokenizedLines[6], lines[6].indexOf('background'))).toContain(
+      'support.type.property-name.css',
+    )
+    expect(scopesAtOffset(lines[8], tokenizedLines[8], lines[8].indexOf('const'))).not.toContain('source.css')
+  })
+
+  it.each([
+    ['TypeScript', 'source.ts'],
+    ['TypeScript React', 'source.tsx'],
+    ['JavaScript', 'source.js'],
+    ['JavaScript React', 'source.js.jsx'],
+  ])('does not guess alias tags as CSS templates in %s', async (_, scopeName) => {
+    const grammar = await loadGrammar(scopeName)
+
+    if (!grammar) {
+      throw new Error(`Unable to load ${scopeName} grammar`)
+    }
+
+    let ruleStack = INITIAL
+    const lines = [
+      'const Panel = s.div`',
+      '  color: red;',
+      '`',
+      'const after = true',
+    ]
+    const tokenizedLines = lines.map((line) => {
+      const result = grammar.tokenizeLine(line, ruleStack)
+      ruleStack = result.ruleStack
+      return result.tokens
+    })
+
+    expect(scopesAtOffset(lines[1], tokenizedLines[1], lines[1].indexOf('color'))).not.toContain(
+      'support.type.property-name.css',
+    )
+    expect(scopesAtOffset(lines[3], tokenizedLines[3], lines[3].indexOf('const'))).not.toContain('source.css')
+  })
+
+  it.each([
     ['TypeScript React', 'source.tsx'],
     ['JavaScript React', 'source.js.jsx'],
   ])('highlights pseudo-classes and pseudo-elements inside %s styled templates', async (_, scopeName) => {

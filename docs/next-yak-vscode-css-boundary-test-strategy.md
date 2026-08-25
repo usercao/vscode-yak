@@ -61,7 +61,7 @@
 | --- | --- | --- | --- |
 | 宿主语言 | `ts`、`tsx`、`js`、`jsx` | grammar | CSS 注入规则分别依赖 TS/JS grammar；四种语言均需有关键 scope 断言 |
 | next-yak tag | 直接 `keyframes`、直接 `styled.*`、`globalStyle` | grammar / Extension Host | grammar 只验证它能静态识别的形态；provider 按 tag 的合法 at-rule 位置收紧候选 |
-| 语义 tag | 具名别名、命名空间、`.attrs(...)`、`styled(Component)` | Extension Host | 继续复用 AST binding 覆盖，避免把同一问题重复写进 grammar |
+| 语义 tag | 具名别名、命名空间、`.attrs(...)`、`styled(Component)` | grammar + Extension Host | grammar 覆盖显式结构的 CSS scope；别名和 import ownership 继续由 AST binding 覆盖，未知别名不得被静态 grammar 猜测为 CSS |
 | keyframe step | `from`、`to`、`0%`、逗号分隔的 `68%, 72%` | grammar；必要时模板层 | 同时覆盖关键字、数值和同一 selector list 中的逗号 |
 | at-rule 名称 | `@`、`@med` | Extension Host | 分别验证空前缀和部分输入的候选及 edit range |
 | at-rule 结构 | 根级 `@media`、嵌套 `@supports`、`@media` prelude、分组规则 body | Extension Host | 覆盖名称、prelude 安全拒绝及规则进入块后继续出现属性补全的路径 |
@@ -113,6 +113,8 @@ const Panel = styled.div`
 - 每个新增 grammar 规则同时加入一个模板结束后的 TS/JSX lexeme 断言，防止贪婪 match 破坏后续宿主高亮。
 - 对四种宿主语言至少保留 keyframes 的完整 fixture 和一个不完整编辑态 fixture；没有行为差异的普通 CSS 属性无需四倍复制。
 - 静态 grammar 可能会高亮非 `next-yak` 的同形 tagged template，这属于已知限制。该限制要以负向测试记录，不能让它阻塞 AST 语义 provider 的正确性。
+- 对泛型、`.attrs(...)`、静态 element access、namespace API 和 CSS prop 等显式结构，四种宿主语言均应验证 CSS scope 与模板结束后的宿主 scope 恢复。alias 不应由 grammar 猜测；它只由 AST provider 确认。
+- 扩展可以为静态 pattern match 的 tag 添加不读取 import 的低影响 decoration，帮助用户辨认其静态性质；不得以 decoration 覆盖 CSS/TypeScript 前景 token，或暗示该模板已通过语义 binding 校验。
 
 ### 模板与虚拟 CSS
 

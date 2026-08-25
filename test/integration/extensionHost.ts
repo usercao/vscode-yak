@@ -474,6 +474,15 @@ export async function run(): Promise<void> {
     })
     await assertPropertyCompletion({ source: styledSource('col', 'styled.div.attrs({})') })
     await assertPropertyCompletion({ source: styledSource('col', "styled['div']") })
+    await assertPropertyCompletion({
+      source: styledSource('col', 'styled.div<{ active: boolean }>'),
+    })
+    await assertPropertyCompletion({
+      source: styledSource('col', 'styled(Component).attrs<{ active: boolean }>({ role: "region" })'),
+    })
+    await assertPropertyCompletion({
+      source: styledSource('col', 'yak.styled.div', "import * as yak from 'next-yak'"),
+    })
   })
 
   await runCase('completes CSS prop and nearest nested templates', async () => {
@@ -481,6 +490,14 @@ export async function run(): Promise<void> {
       source: [
         "import { css } from 'next-yak'",
         'const view = <section css={css`',
+        `  col${cursorMarker}`,
+        '`} />',
+      ].join('\n'),
+    })
+    await assertPropertyCompletion({
+      source: [
+        "import * as yak from 'next-yak'",
+        'const view = <section css={yak.css`',
         `  col${cursorMarker}`,
         '`} />',
       ].join('\n'),
