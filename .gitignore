@@ -6,14 +6,18 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+docs/**
 
-node_modules
-.vscode-test
-dist
-dist-ssr
+node_modules/
+.vscode-test/
+
+# Build and package artifacts
+dist/
+build/
+*.vsix
+
 *.local
 .yarn/*
-*.vsix
 
 # Editor directories and files
 .idea
@@ -25,5 +29,4 @@ dist-ssr
 *.sw?
 .swc/
 
-.eslintcache
 *.tsbuildinfo

@@ -83,7 +83,7 @@ The sole authored JavaScript-family fixture is [test-workspace/example.jsx](test
 
 ## Parser Performance
 
-The extension caches TypeScript template analysis by document URI and version, invalidating it when VS Code reports a document change or close. This avoids rebuilding a TypeScript `Program` during consecutive completion requests while retaining semantic import and local-shadowing checks. [Parser and bundle decision](docs/parser-decision.md) records the measured bundle budget and the Oxc evaluation: Oxc is not currently a drop-in replacement because its public Node parser API does not expose the lexical symbol bindings needed to preserve those checks.
+The extension caches TypeScript template analysis by document URI and version, invalidating it when VS Code reports a document change or close. This avoids rebuilding a TypeScript `Program` during consecutive completion requests while retaining semantic import and local-shadowing checks. Oxc is not currently a drop-in replacement because its public Node parser API does not expose the lexical symbol bindings needed to preserve those checks.
 
 ## Completion Reliability
 

@@ -5,6 +5,7 @@
 docs/**
 src/**
 test/**
+.vscode-test/**
 tsconfig.json
 tsdown.config.ts
 tsdown.tests.config.ts
@@ -12,4 +13,7 @@ tsdown.tests.config.ts
 .yarn/*
 yarn.lock
 node_modules/**
+
+# Generated package artifacts
+build/**
 test-workspace/**
