@@ -26,6 +26,7 @@ import {
   mapVirtualRangeToSourceOffsets,
   TemplateCache,
 } from '../src/template'
+import { getTemplateLibraryProfiles } from '../src/templateLibraries'
 
 const cursorMarker = '/*cursor*/'
 
@@ -90,6 +91,33 @@ function expectTemplateTag(
 }
 
 describe('findTemplate', () => {
+  it.each(['next-yak', '@yak/react', 'yak'])(
+    'recognizes %s as a yak migration module',
+    (moduleSpecifier) => {
+      const { template } = findTemplateAtCursor(
+        styledSource('styled.div', `import { styled } from '${moduleSpecifier}'`),
+      )
+
+      expect(template).toMatchObject({ library: 'yak', tag: 'styled' })
+    },
+  )
+
+  it.each(['next-yak', '@yak/react', 'yak'])(
+    'recognizes aliases and namespace imports from %s',
+    (moduleSpecifier) => {
+      expect(
+        findTemplateAtCursor(
+          styledSource('s.div', `import { styled as s } from '${moduleSpecifier}'`),
+        ).template,
+      ).toMatchObject({ library: 'yak', tag: 'styled' })
+      expect(
+        findTemplateAtCursor(
+          styledSource('library.css', `import * as library from '${moduleSpecifier}'`),
+        ).template,
+      ).toMatchObject({ library: 'yak', tag: 'css' })
+    },
+  )
+
   it.each([
     ['styled', 'styled.div'],
     ['css', 'css'],
@@ -119,6 +147,68 @@ describe('findTemplate', () => {
     expect(
       findTemplateAtCursor(styledSource('yak.css', "import * as yak from 'yak'")).template?.tag,
     ).toBe('css')
+  })
+
+  it('recognizes styled-components default, named, and namespace imports', () => {
+    expect(
+      findTemplateAtCursor(styledSource('styled.button', "import styled from 'styled-components'"))
+        .template,
+    ).toMatchObject({ library: 'styled-components', tag: 'styled' })
+    expect(
+      findTemplateAtCursor(
+        styledSource(
+          'GlobalStyle',
+          "import { createGlobalStyle as GlobalStyle } from 'styled-components'",
+        ),
+      ).template,
+    ).toMatchObject({ library: 'styled-components', tag: 'globalStyle' })
+    expect(
+      findTemplateAtCursor(styledSource('sc.css', "import * as sc from 'styled-components'"))
+        .template,
+    ).toMatchObject({ library: 'styled-components', tag: 'css' })
+    expect(
+      findTemplateAtCursor(styledSource('sc.styled.a', "import * as sc from 'styled-components'"))
+        .template,
+    ).toMatchObject({ library: 'styled-components', tag: 'styled' })
+  })
+
+  it('does not recognize disabled template library profiles', () => {
+    const sourceWithCursor = styledSource('styled.div', "import styled from 'styled-components'")
+    const cursorOffset = sourceWithCursor.indexOf(cursorMarker)
+    const source = sourceWithCursor.replace(cursorMarker, '')
+
+    expect(
+      findTemplate(
+        source,
+        cursorOffset,
+        'typescriptreact',
+        '/fixture.tsx',
+        getTemplateLibraryProfiles(['yak']),
+      ),
+    ).toBeUndefined()
+  })
+
+  it('rejects type-only, shadowed, and unrelated styled-components bindings', () => {
+    expect(
+      findTemplateAtCursor(
+        styledSource('styled.div', "import type styled from 'styled-components'"),
+      ).template,
+    ).toBeUndefined()
+    expect(
+      findTemplateAtCursor(styledSource('styled.div', "import styled from '@emotion/styled'"))
+        .template,
+    ).toBeUndefined()
+
+    const source = [
+      "import styled from 'styled-components'",
+      'function render(styled: { div: unknown }) {',
+      '  return styled.div`',
+      `    color: red;${cursorMarker}`,
+      '  `',
+      '}',
+    ].join('\n')
+
+    expect(findTemplateAtCursor(source).template).toBeUndefined()
   })
 
   it('recognizes styled calls, type arguments, and attrs chains', () => {
@@ -520,6 +610,27 @@ describe('TemplateCache', () => {
     createProgramSpy.mockClear()
     expect(cache.findTemplate(tsx.document, tsx.cursorOffset)?.tag).toBe('styled')
     expect(cache.findTemplate(javascript, tsx.cursorOffset)?.tag).toBe('styled')
+    expect(createProgramSpy).toHaveBeenCalledTimes(2)
+  })
+
+  it('rebuilds the semantic analysis when enabled profiles change', () => {
+    const cache = new TemplateCache()
+    const request = templateCacheRequest(
+      styledSource('styled.div', "import styled from 'styled-components'"),
+      1,
+    )
+
+    createProgramSpy.mockClear()
+    expect(cache.findTemplate(request.document, request.cursorOffset)?.library).toBe(
+      'styled-components',
+    )
+    expect(
+      cache.findTemplate(
+        request.document,
+        request.cursorOffset,
+        getTemplateLibraryProfiles(['yak']),
+      ),
+    ).toBeUndefined()
     expect(createProgramSpy).toHaveBeenCalledTimes(2)
   })
 

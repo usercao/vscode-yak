@@ -577,6 +577,144 @@ export async function run(): Promise<void> {
     })
   })
 
+  await runCase('completes current next-yak and styled-components templates', async () => {
+    await assertPropertyCompletion({
+      source: styledSource('col', 'styled.div', "import { styled } from 'next-yak'"),
+    })
+    await assertPropertyCompletion({
+      source: styledSource('col', 'styled.button', "import styled from 'styled-components'"),
+    })
+    await assertPropertyCompletion({
+      source: [
+        "import { createGlobalStyle } from 'styled-components'",
+        'const GlobalStyle = createGlobalStyle`',
+        `  col${cursorMarker}`,
+        '`',
+      ].join('\n'),
+    })
+  })
+
+  await runCase('honors configured template library profiles', async () => {
+    const source = [
+      "import styled from 'styled-components'",
+      'const Panel = styled.div`',
+      `  col${cursorMarker}`,
+      '  colro: red;',
+      '`',
+    ].join('\n')
+    const cursorOffset = source.indexOf(cursorMarker)
+    const document = await vscode.workspace.openTextDocument({
+      language: 'typescriptreact',
+      content: source.replace(cursorMarker, ''),
+    })
+    const configuration = vscode.workspace.getConfiguration('yak', document.uri)
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
+    const settingsDirectory = workspaceFolder && vscode.Uri.joinPath(workspaceFolder.uri, '.vscode')
+    const settingsFile =
+      settingsDirectory && vscode.Uri.joinPath(settingsDirectory, 'settings.json')
+    const settingsDirectoryExisted = settingsDirectory
+      ? await resourceExists(settingsDirectory)
+      : true
+    const settingsFileExisted = settingsFile ? await resourceExists(settingsFile) : true
+    const previousWorkspaceValue =
+      configuration.inspect<readonly string[]>('templateLibraries')?.workspaceValue
+
+    try {
+      assert.ok(diagnosticForText(document, 'colro'), 'Expected initial CSS diagnostic')
+      assert.ok(
+        findExtensionItem(await completionItemsAt(document, cursorOffset), 'color'),
+        'Expected initial styled-components completion',
+      )
+
+      await configuration.update('templateLibraries', ['yak'], vscode.ConfigurationTarget.Workspace)
+      assert.deepEqual(extensionItems(await completionItemsAt(document, cursorOffset)), [])
+      assert.equal(
+        diagnosticForText(document, 'colro'),
+        undefined,
+        'Expected diagnostics to clear when the styled-components Profile is disabled',
+      )
+      await configuration.update(
+        'templateLibraries',
+        ['yak', 'styled-components'],
+        vscode.ConfigurationTarget.Workspace,
+      )
+      assert.ok(
+        findExtensionItem(await completionItemsAt(document, cursorOffset), 'color'),
+        'Expected styled-components completion after re-enabling its Profile',
+      )
+      assert.ok(
+        diagnosticForText(document, 'colro'),
+        'Expected diagnostics to return after re-enabling the styled-components Profile',
+      )
+    } finally {
+      await configuration.update(
+        'templateLibraries',
+        previousWorkspaceValue,
+        vscode.ConfigurationTarget.Workspace,
+      )
+
+      if (settingsFile && !settingsFileExisted && (await resourceExists(settingsFile))) {
+        await vscode.workspace.fs.delete(settingsFile, { useTrash: false })
+      }
+
+      if (
+        settingsDirectory &&
+        !settingsDirectoryExisted &&
+        (await resourceExists(settingsDirectory))
+      ) {
+        await vscode.workspace.fs.delete(settingsDirectory, { recursive: false, useTrash: false })
+      }
+    }
+  })
+
+  await runCase('shares CSS language features with styled-components templates', async () => {
+    const source = [
+      "import styled from 'styled-components'",
+      'const Panel = styled.div`',
+      '  display: grid;',
+      '  color: rebeccapurple;',
+      '  colro: red;',
+      '`',
+    ].join('\n')
+    const document = await vscode.workspace.openTextDocument({
+      language: 'typescriptreact',
+      content: source,
+    })
+    const displayOffset = source.indexOf('display')
+    const hovers = await registeredHoversAt(document, displayOffset)
+    const typo = diagnosticForText(document, 'colro')
+    const colors = await registeredDocumentColors(document)
+
+    assert.ok(
+      hovers.some((hover) => hoverContentText(hover).includes('MDN Reference')),
+      'Expected a CSS property hover for a styled-components template',
+    )
+    assert.ok(typo, 'Expected a CSS diagnostic for a styled-components template')
+    assert.deepEqual(
+      colors.map((color) => document.getText(color.range)),
+      ['rebeccapurple', 'red'],
+      'Expected a mapped CSS color for a styled-components template',
+    )
+
+    const provider = await createDirectCodeActionProvider(extension.extensionPath)
+    const actions = provider.provideCodeActions(
+      document,
+      typo.range,
+      {
+        diagnostics: [typo],
+        only: vscode.CodeActionKind.QuickFix,
+        triggerKind: vscode.CodeActionTriggerKind.Invoke,
+      },
+      neverCancelledToken,
+    )
+    const availableActions = actions ?? []
+
+    assert.ok(
+      availableActions.some((action) => action.title.includes("Rename to 'color'")),
+      'Expected a CSS quick fix for a styled-components template',
+    )
+  })
+
   await runCase('completes CSS prop and nearest nested templates', async () => {
     await assertPropertyCompletion({
       source: [

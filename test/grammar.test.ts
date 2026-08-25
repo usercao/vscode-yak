@@ -7,6 +7,8 @@ import { describe, expect, it } from 'vitest'
 import { loadWASM, OnigScanner, OnigString } from 'vscode-oniguruma'
 import { INITIAL, Registry } from 'vscode-textmate'
 
+import { templateLibraryProfiles } from '../src/templateLibraries'
+
 const workspaceRoot = fileURLToPath(new URL('..', import.meta.url))
 const vscodeExtensionsRoot = findVscodeExtensionsRoot()
 
@@ -121,6 +123,51 @@ function scopesAtOffset(
 }
 
 describe('yak TextMate grammar', () => {
+  it.each([
+    ['TypeScript', 'source.ts'],
+    ['JavaScript', 'source.js'],
+  ])('highlights every static template library tag in %s', async (_, scopeName) => {
+    const grammar = await loadGrammar(scopeName)
+
+    if (!grammar) {
+      throw new Error(`Unable to load ${scopeName} grammar`)
+    }
+
+    const staticTags = new Map<string, boolean>()
+
+    for (const profile of templateLibraryProfiles) {
+      for (const tagName of profile.staticGrammar.namedTagNames) {
+        staticTags.set(tagName, false)
+      }
+
+      for (const tagName of profile.staticGrammar.styledLikeTagNames) {
+        staticTags.set(tagName, true)
+      }
+    }
+
+    const lines = [...staticTags].flatMap(([tagName, isStyledLike]) => [
+      `const Value = ${isStyledLike ? `${tagName}.div` : tagName}\``,
+      '  color: red;',
+      '`',
+    ])
+    let ruleStack = INITIAL
+    const tokenizedLines = lines.map((line) => {
+      const result = grammar.tokenizeLine(line, ruleStack)
+      ruleStack = result.ruleStack
+      return result.tokens
+    })
+
+    for (let lineIndex = 1; lineIndex < lines.length; lineIndex += 3) {
+      expect(
+        scopesAtOffset(
+          lines[lineIndex],
+          tokenizedLines[lineIndex],
+          lines[lineIndex].indexOf('color'),
+        ),
+      ).toContain('support.type.property-name.css')
+    }
+  })
+
   it.each([
     ['TypeScript', 'source.ts'],
     ['TypeScript React', 'source.tsx'],
@@ -265,6 +312,53 @@ describe('yak TextMate grammar', () => {
     expect(scopesAtOffset(lines[6], tokenizedLines[6], lines[6].indexOf('background'))).toContain(
       'support.type.property-name.css',
     )
+    expect(scopesAtOffset(lines[8], tokenizedLines[8], lines[8].indexOf('const'))).not.toContain(
+      'source.css',
+    )
+  })
+
+  it.each([
+    ['TypeScript', 'source.ts'],
+    ['TypeScript React', 'source.tsx'],
+    ['JavaScript', 'source.js'],
+    ['JavaScript React', 'source.js.jsx'],
+  ])('highlights styled-components global styles in %s', async (_, scopeName) => {
+    const grammar = await loadGrammar(scopeName)
+
+    if (!grammar) {
+      throw new Error(`Unable to load ${scopeName} grammar`)
+    }
+
+    let ruleStack = INITIAL
+    const lines = [
+      "import { createGlobalStyle } from 'styled-components'",
+      "import * as sc from 'styled-components'",
+      'const Direct = createGlobalStyle`',
+      '  color: red;',
+      '`',
+      'const Namespaced = sc.createGlobalStyle`',
+      '  background: blue;',
+      '`',
+      'const after = true',
+    ]
+    const tokenizedLines = lines.map((line) => {
+      const result = grammar.tokenizeLine(line, ruleStack)
+      ruleStack = result.ruleStack
+      return result.tokens
+    })
+
+    for (const [lineIndex, property] of [
+      [3, 'color'],
+      [6, 'background'],
+    ] as const) {
+      expect(
+        scopesAtOffset(
+          lines[lineIndex],
+          tokenizedLines[lineIndex],
+          lines[lineIndex].indexOf(property),
+        ),
+      ).toContain('support.type.property-name.css')
+    }
     expect(scopesAtOffset(lines[8], tokenizedLines[8], lines[8].indexOf('const'))).not.toContain(
       'source.css',
     )

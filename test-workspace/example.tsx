@@ -1,4 +1,4 @@
-import { css, globalStyle, keyframes, styled } from 'yak'
+import { css, globalStyle, keyframes, styled } from 'next-yak'
 
 const accent = 'rebeccapurple'
 

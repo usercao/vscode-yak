@@ -35,6 +35,11 @@ import {
   type Template,
   type SelectorCompletionContext,
 } from './template'
+import {
+  getTemplateLibraryProfiles,
+  templateLibraryIds,
+  type TemplateLibraryProfile,
+} from './templateLibraries'
 
 const cssLanguageService = getCSSLanguageService()
 const cssPropertyNames = new Set(
@@ -89,6 +94,7 @@ const cssCompletionTriggerCharacters =
   'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ:-@'.split('')
 const cssDiagnosticSource = 'yak CSS'
 const cssValidateConfiguration = 'yak.css.validate'
+const templateLibrariesConfiguration = 'yak.templateLibraries'
 type CssCompletionService = Pick<CssLanguageService, 'doComplete' | 'parseStylesheet'>
 
 export function activate(context: vscode.ExtensionContext) {
@@ -124,6 +130,12 @@ export function activate(context: vscode.ExtensionContext) {
       updateDiagnostics(document)
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration(templateLibrariesConfiguration)) {
+        templateCache.clear()
+        refreshDiagnostics()
+        return
+      }
+
       if (event.affectsConfiguration(cssValidateConfiguration)) {
         refreshDiagnostics()
       }
@@ -173,6 +185,7 @@ export class CssCompletionProvider implements vscode.CompletionItemProvider {
         version: document.version,
       },
       cursorOffset,
+      getTemplateLibraries(document.uri),
     )
 
     if (!template) {
@@ -247,6 +260,7 @@ export class CssHoverProvider implements vscode.HoverProvider {
         version: document.version,
       },
       cursorOffset,
+      getTemplateLibraries(document.uri),
     )
 
     if (!template) {
@@ -287,13 +301,16 @@ export class CssDiagnosticProvider {
     }
 
     const source = document.getText()
-    const templates = this.templateCache.findTemplates({
-      fileName: document.fileName,
-      languageId: document.languageId,
-      source,
-      uri: document.uri.toString(),
-      version: document.version,
-    })
+    const templates = this.templateCache.findTemplates(
+      {
+        fileName: document.fileName,
+        languageId: document.languageId,
+        source,
+        uri: document.uri.toString(),
+        version: document.version,
+      },
+      getTemplateLibraries(document.uri),
+    )
     const mappedDiagnostics = templates.flatMap((template) => {
       const virtualCss = createVirtualCssDocument(document, template)
 
@@ -326,13 +343,16 @@ export class CssCodeActionProvider implements vscode.CodeActionProvider {
     }
 
     const source = document.getText()
-    const templates = this.templateCache.findTemplates({
-      fileName: document.fileName,
-      languageId: document.languageId,
-      source,
-      uri: document.uri.toString(),
-      version: document.version,
-    })
+    const templates = this.templateCache.findTemplates(
+      {
+        fileName: document.fileName,
+        languageId: document.languageId,
+        source,
+        uri: document.uri.toString(),
+        version: document.version,
+      },
+      getTemplateLibraries(document.uri),
+    )
     const actions: vscode.CodeAction[] = []
 
     for (const template of templates) {
@@ -474,7 +494,18 @@ function isSupportedDocument(document: vscode.TextDocument) {
 }
 
 function getDocumentTemplates(document: vscode.TextDocument, templateCache: TemplateCache) {
-  return templateCache.findTemplates(getTemplateDocument(document))
+  return templateCache.findTemplates(
+    getTemplateDocument(document),
+    getTemplateLibraries(document.uri),
+  )
+}
+
+function getTemplateLibraries(resource: vscode.Uri): readonly TemplateLibraryProfile[] {
+  const ids = vscode.workspace
+    .getConfiguration('yak', resource)
+    .get<readonly string[]>('templateLibraries', templateLibraryIds)
+
+  return getTemplateLibraryProfiles(ids)
 }
 
 function getTemplateDocument(document: vscode.TextDocument) {

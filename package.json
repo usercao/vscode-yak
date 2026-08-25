@@ -65,6 +65,23 @@
           "default": true,
           "scope": "resource",
           "markdownDescription": "Enable CSS diagnostics inside statically recognized yak tagged templates. This does not affect CSS completion or hover."
+        },
+        "yak.templateLibraries": {
+          "type": "array",
+          "default": [
+            "yak",
+            "styled-components"
+          ],
+          "items": {
+            "type": "string",
+            "enum": [
+              "yak",
+              "styled-components"
+            ]
+          },
+          "uniqueItems": true,
+          "scope": "resource",
+          "markdownDescription": "Select the CSS-in-JS template library profiles recognized by this extension. The `yak` profile supports `next-yak`, `@yak/react`, and `yak` imports."
         }
       }
     },

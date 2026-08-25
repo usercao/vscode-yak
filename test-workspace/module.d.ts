@@ -1,4 +1,4 @@
-declare module 'yak' {
+declare module 'next-yak' {
   type StyleTag = (strings: TemplateStringsArray, ...interpolations: unknown[]) => unknown
 
   export const styled: Record<string, StyleTag> & ((component: unknown) => StyleTag)

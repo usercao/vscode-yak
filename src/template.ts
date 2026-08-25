@@ -1,6 +1,14 @@
 import * as ts from 'typescript'
 
-export type TemplateTag = 'styled' | 'css' | 'globalStyle' | 'keyframes'
+import {
+  getTemplateLibraryProfile,
+  getTemplateLibraryProfiles,
+  type TemplateLibraryId,
+  type TemplateLibraryProfile,
+  type TemplateTag,
+} from './templateLibraries'
+
+export type { TemplateLibraryId, TemplateTag } from './templateLibraries'
 
 export interface OffsetRange {
   start: number
@@ -11,6 +19,7 @@ export interface Template {
   bodyEnd: number
   bodyStart: number
   interpolations: readonly OffsetRange[]
+  library: TemplateLibraryId
   maskedBody: string
   tag: TemplateTag
 }
@@ -62,11 +71,13 @@ export interface TemplateDocument {
 
 interface NamedTemplateBinding {
   kind: 'named'
+  library: TemplateLibraryId
   tag: TemplateTag
 }
 
 interface NamespaceTemplateBinding {
   kind: 'namespace'
+  profile: TemplateLibraryProfile
 }
 
 interface TagPath {
@@ -78,13 +89,20 @@ interface TagPath {
 interface CachedTemplateAnalysis {
   fileName: string
   languageId: string
+  profileKey: string
   sourceFile: ts.SourceFile
   taggedTemplates: readonly TaggedTemplate[]
   version: number
 }
 
 interface TaggedTemplate {
+  library: TemplateLibraryId
   node: ts.TaggedTemplateExpression
+  tag: TemplateTag
+}
+
+interface TemplateIdentity {
+  library: TemplateLibraryId
   tag: TemplateTag
 }
 
@@ -96,7 +114,6 @@ interface CssBlock {
   kind: CssBlockKind
 }
 
-const supportedTagNames = new Set<TemplateTag>(['styled', 'css', 'globalStyle', 'keyframes'])
 const descriptorAtRuleNames = new Set([
   '@counter-style',
   '@font-face',
@@ -139,18 +156,25 @@ export class TemplateCache {
     this.analyses.clear()
   }
 
-  findTemplate(document: TemplateDocument, cursorOffset: number): Template | undefined {
+  findTemplate(
+    document: TemplateDocument,
+    cursorOffset: number,
+    templateLibraries = getTemplateLibraryProfiles(),
+  ): Template | undefined {
     if (cursorOffset < 0 || cursorOffset > document.source.length) {
       return undefined
     }
 
-    const analysis = this.getAnalysis(document)
+    const analysis = this.getAnalysis(document, templateLibraries)
 
     return analysis ? findTemplateInAnalysis(document.source, cursorOffset, analysis) : undefined
   }
 
-  findTemplates(document: TemplateDocument): readonly Template[] {
-    const analysis = this.getAnalysis(document)
+  findTemplates(
+    document: TemplateDocument,
+    templateLibraries = getTemplateLibraryProfiles(),
+  ): readonly Template[] {
+    const analysis = this.getAnalysis(document, templateLibraries)
 
     if (!analysis) {
       return []
@@ -161,6 +185,7 @@ export class TemplateCache {
         document.source,
         analysis.sourceFile,
         taggedTemplate.node,
+        taggedTemplate.library,
         taggedTemplate.tag,
       )
 
@@ -172,10 +197,14 @@ export class TemplateCache {
     this.analyses.delete(uri)
   }
 
-  private getAnalysis(document: TemplateDocument): CachedTemplateAnalysis | undefined {
+  private getAnalysis(
+    document: TemplateDocument,
+    templateLibraries: readonly TemplateLibraryProfile[],
+  ): CachedTemplateAnalysis | undefined {
     const cachedAnalysis = this.analyses.get(document.uri)
+    const profileKey = getTemplateLibraryProfileKey(templateLibraries)
 
-    if (cachedAnalysis && matchesDocument(cachedAnalysis, document)) {
+    if (cachedAnalysis && matchesDocument(cachedAnalysis, document, profileKey)) {
       return cachedAnalysis
     }
 
@@ -184,6 +213,7 @@ export class TemplateCache {
       document.languageId,
       document.fileName,
       document.version,
+      templateLibraries,
     )
 
     if (analysis) {
@@ -201,21 +231,27 @@ export function findTemplate(
   cursorOffset: number,
   languageId: string,
   fileName: string,
+  templateLibraries = getTemplateLibraryProfiles(),
 ): Template | undefined {
   if (cursorOffset < 0 || cursorOffset > source.length) {
     return undefined
   }
 
-  const analysis = tryCreateTemplateAnalysis(source, languageId, fileName, 0)
+  const analysis = tryCreateTemplateAnalysis(source, languageId, fileName, 0, templateLibraries)
 
   return analysis ? findTemplateInAnalysis(source, cursorOffset, analysis) : undefined
 }
 
-function matchesDocument(analysis: CachedTemplateAnalysis, document: TemplateDocument) {
+function matchesDocument(
+  analysis: CachedTemplateAnalysis,
+  document: TemplateDocument,
+  profileKey: string,
+) {
   return (
     analysis.version === document.version &&
     analysis.languageId === document.languageId &&
     analysis.fileName === document.fileName &&
+    analysis.profileKey === profileKey &&
     analysis.sourceFile.text === document.source
   )
 }
@@ -225,6 +261,7 @@ function createTemplateAnalysis(
   languageId: string,
   fileName: string,
   version: number,
+  templateLibraries: readonly TemplateLibraryProfile[],
 ): CachedTemplateAnalysis {
   const sourceFile = ts.createSourceFile(
     fileName,
@@ -234,16 +271,16 @@ function createTemplateAnalysis(
     toScriptKind(languageId),
   )
   const checker = createTypeChecker(sourceFile, fileName)
-  const bindings = collectTemplateBindings(sourceFile, checker)
+  const bindings = collectTemplateBindings(sourceFile, checker, templateLibraries)
   const taggedTemplates: TaggedTemplate[] = []
 
   if (bindings.size > 0) {
     const visit = (node: ts.Node) => {
       if (ts.isTaggedTemplateExpression(node)) {
-        const tag = getTemplateTag(node.tag, checker, bindings)
+        const template = getTemplateIdentity(node.tag, checker, bindings)
 
-        if (tag) {
-          taggedTemplates.push({ node, tag })
+        if (template) {
+          taggedTemplates.push({ node, ...template })
         }
       }
 
@@ -256,6 +293,7 @@ function createTemplateAnalysis(
   return {
     fileName,
     languageId,
+    profileKey: getTemplateLibraryProfileKey(templateLibraries),
     sourceFile,
     taggedTemplates,
     version,
@@ -267,9 +305,10 @@ function tryCreateTemplateAnalysis(
   languageId: string,
   fileName: string,
   version: number,
+  templateLibraries: readonly TemplateLibraryProfile[],
 ): CachedTemplateAnalysis | undefined {
   try {
-    return createTemplateAnalysis(source, languageId, fileName, version)
+    return createTemplateAnalysis(source, languageId, fileName, version, templateLibraries)
   } catch {
     return undefined
   }
@@ -287,6 +326,7 @@ function findTemplateInAnalysis(
       source,
       analysis.sourceFile,
       taggedTemplate.node,
+      taggedTemplate.library,
       taggedTemplate.tag,
       cursorOffset,
     )
@@ -570,6 +610,7 @@ function createTemplate(
   source: string,
   sourceFile: ts.SourceFile,
   taggedTemplate: ts.TaggedTemplateExpression,
+  library: TemplateLibraryId,
   tag: TemplateTag,
   cursorOffset?: number,
 ): Template | undefined {
@@ -612,20 +653,27 @@ function createTemplate(
     bodyStart,
     bodyEnd,
     interpolations: scannedTemplate.interpolations,
+    library,
     maskedBody: maskInterpolations(body, scannedTemplate.interpolations),
     tag,
   }
 }
 
-function collectTemplateBindings(sourceFile: ts.SourceFile, checker: ts.TypeChecker) {
+function collectTemplateBindings(
+  sourceFile: ts.SourceFile,
+  checker: ts.TypeChecker,
+  templateLibraries: readonly TemplateLibraryProfile[],
+) {
   const bindings = new Map<ts.Symbol, TemplateBinding>()
 
   for (const statement of sourceFile.statements) {
-    if (
-      !ts.isImportDeclaration(statement) ||
-      !ts.isStringLiteral(statement.moduleSpecifier) ||
-      statement.moduleSpecifier.text !== 'yak'
-    ) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
+      continue
+    }
+
+    const profile = getTemplateLibraryProfile(statement.moduleSpecifier.text, templateLibraries)
+
+    if (!profile) {
       continue
     }
 
@@ -633,6 +681,18 @@ function collectTemplateBindings(sourceFile: ts.SourceFile, checker: ts.TypeChec
 
     if (!importClause || importClause.isTypeOnly) {
       continue
+    }
+
+    if (importClause.name && profile.defaultImport) {
+      const symbol = checker.getSymbolAtLocation(importClause.name)
+
+      if (symbol) {
+        bindings.set(symbol, {
+          kind: 'named',
+          library: profile.id,
+          tag: profile.defaultImport,
+        })
+      }
     }
 
     const namedBindings = importClause.namedBindings
@@ -645,7 +705,7 @@ function collectTemplateBindings(sourceFile: ts.SourceFile, checker: ts.TypeChec
       const symbol = checker.getSymbolAtLocation(namedBindings.name)
 
       if (symbol) {
-        bindings.set(symbol, { kind: 'namespace' })
+        bindings.set(symbol, { kind: 'namespace', profile })
       }
 
       continue
@@ -658,14 +718,16 @@ function collectTemplateBindings(sourceFile: ts.SourceFile, checker: ts.TypeChec
 
       const importedName = element.propertyName?.text ?? element.name.text
 
-      if (!isSupportedTag(importedName)) {
+      const tag = profile.namedImports[importedName]
+
+      if (!tag) {
         continue
       }
 
       const symbol = checker.getSymbolAtLocation(element.name)
 
       if (symbol) {
-        bindings.set(symbol, { kind: 'named', tag: importedName })
+        bindings.set(symbol, { kind: 'named', library: profile.id, tag })
       }
     }
   }
@@ -673,11 +735,11 @@ function collectTemplateBindings(sourceFile: ts.SourceFile, checker: ts.TypeChec
   return bindings
 }
 
-function getTemplateTag(
+function getTemplateIdentity(
   expression: ts.Expression,
   checker: ts.TypeChecker,
   bindings: ReadonlyMap<ts.Symbol, TemplateBinding>,
-): TemplateTag | undefined {
+): TemplateIdentity | undefined {
   const tagPath = getTagPath(expression)
 
   if (!tagPath) {
@@ -692,16 +754,21 @@ function getTemplateTag(
   }
 
   if (binding.kind === 'named') {
-    return getTemplateTagFromPath(binding.tag, tagPath.properties, tagPath.hasCall)
+    const tag = getTemplateTagFromPath(binding.tag, tagPath.properties, tagPath.hasCall)
+
+    return tag ? { library: binding.library, tag } : undefined
   }
 
   const [tagName, ...remainingProperties] = tagPath.properties
+  const tag = tagName && binding.profile.namespaceImports[tagName]
 
-  if (!isSupportedTag(tagName)) {
+  if (!tag) {
     return undefined
   }
 
-  return getTemplateTagFromPath(tagName, remainingProperties, tagPath.hasCall)
+  const resolvedTag = getTemplateTagFromPath(tag, remainingProperties, tagPath.hasCall)
+
+  return resolvedTag ? { library: binding.profile.id, tag: resolvedTag } : undefined
 }
 
 function getTemplateTagFromPath(
@@ -772,8 +839,8 @@ function getTagPath(node: ts.Node): TagPath | undefined {
   return undefined
 }
 
-function isSupportedTag(value: string): value is TemplateTag {
-  return supportedTagNames.has(value as TemplateTag)
+function getTemplateLibraryProfileKey(templateLibraries: readonly TemplateLibraryProfile[]) {
+  return templateLibraries.map((profile) => profile.id).join(',')
 }
 
 function toScriptKind(languageId: string) {
