@@ -176,6 +176,8 @@
 ### CI 与质量门禁
 
 - [ ] 配置 GitHub Actions 在 pull request 上执行 `yarn verify`。
+- [ ] 统一本地 CLI 与 CI 的 Extension Host 测试二进制：移除 macOS 自动回退到 `/Applications/Visual Studio Code.app/...` 的行为，默认均由 `@vscode/test-electron` 下载并缓存固定的 VS Code `1.134.0`；仅保留显式 `VSCODE_EXECUTABLE_PATH` 作为本地调试覆盖。
+- [ ] 在 Linux GitHub Actions runner 使用 `xvfb-run -a yarn verify` 运行真实 Extension Host 测试；不要将其替换为 mock-only 测试，以继续覆盖 VS Code provider 注册、诊断、快速修复和命令集成。
 - [ ] 配置依赖更新检查并在 TypeScript、VS Code API 和 CSS Language Service 升级时运行完整测试矩阵。
 - [ ] 配置测试覆盖率报告并为模板识别、范围映射和伪类回退设定最低覆盖目标。
 - [ ] 配置 markdown、JSON、package manifest 和 VSIX 内容检查以防止发布配置回归。
