@@ -18,6 +18,7 @@ build/
 
 *.local
 .yarn/*
+.tmp/*
 
 # Editor directories and files
 .idea

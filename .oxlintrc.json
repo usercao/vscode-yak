@@ -2,6 +2,7 @@
   "plugins": ["typescript", "unicorn", "oxc", "import"],
   "ignorePatterns": [
     ".yarn/**",
+    ".tmp/**",
     ".vscode-test/**",
     "build/**",
     "dist/**",

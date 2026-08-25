@@ -11,6 +11,7 @@ tsdown.config.ts
 tsdown.tests.config.ts
 *.vsix
 .yarn/*
+.tmp/*
 yarn.lock
 node_modules/**
 
