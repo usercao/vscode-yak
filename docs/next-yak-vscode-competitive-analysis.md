@@ -1,6 +1,6 @@
 # next-yak VS Code 扩展竞品对比与语法决策
 
-> 调研日期：2026-08-24
+> 竞品调研日期：2026-08-24；当前实现复核：2026-08-25。
 >
 > 参照对象：
 > - [`styled-components/vscode-styled-components`](https://github.com/styled-components/vscode-styled-components)
@@ -10,9 +10,9 @@
 
 ## 结论
 
-当前扩展已完成一个可用的 MVP：在 TS、TSX、JS、JSX 的 next-yak tagged template 中提供 CSS 高亮、静态 CSS 补全、伪类/伪元素补全，并把 `${...}` 内交还给 JavaScript/TypeScript。P0 的语义识别与测试基础设施已经实现。
+当前扩展已完成 P1 的静态 CSS 语言体验：在 TS、TSX、JS、JSX 的 next-yak tagged template 中提供 CSS 高亮、补全、hover、诊断、快速修复和颜色 picker，并把 `${...}` 内交还给 JavaScript/TypeScript。语义识别、虚拟 CSS 映射和真实 Extension Host 测试基础设施已经实现。
 
-与两个参照项目相比，主要缺口是语义识别、完整语言功能与测试，不是必须把模板语言改成 SCSS 或 Less。
+与两个参照项目相比，主要剩余差距是项目级 CSS 数据与索引、跨文件语义识别、可配置 API、折叠与输入辅助，以及跨平台 CI/发布工程；不再是 P1 的基础 hover、诊断、快速修复或颜色能力，更不是必须把模板语言改成 SCSS 或 Less。
 
 - `next-yak` 官方定位是“使用 styled-components 风格 API 的标准 CSS 语法”，并明确展示原生 CSS 嵌套、媒体查询和 keyframes。
 - `typescript-styled-plugin` 确实把虚拟模板按 `scss` 交给 `getSCSSLanguageService` 处理；`vscode-styled-components` 也使用带 `source.css.scss` scope 的 TextMate grammar。
@@ -36,31 +36,32 @@
 
 当前仓库的实际实现集中在 [`src/extension.ts`](../src/extension.ts) 与 [`package.json`](../package.json)：
 
-- 对 TypeScript、TSX、JavaScript、JSX 注入 CSS TextMate grammar。
-- 使用 TypeScript AST 确认直接、别名和命名空间 `next-yak` import；识别 `styled.tag`、`styled(Component)`、类型参数、`.attrs(...)`、`css`、`globalStyle`、`keyframes`，并排除局部遮蔽。
-- 将静态模板文本包装为虚拟 CSS 文档，使用 `vscode-css-languageservice` 提供属性、值、函数、at-rule 与自定义属性补全。
-- 屏蔽 `${...}` 后保持 offset 对齐；插值位置返回 `undefined`，交由原生 TS/JS 补全处理。
-- 将 CSS 候选优先排序，降低 TSX 中 Emmet JSX 候选遮挡 CSS 属性的影响。
-- 对 `a:`、`a::` 等根级选择器上下文补充伪类和伪元素候选，规避虚拟 `:root` 包装被 CSS Language Service 误判为不完整声明的问题。
+- 对 TypeScript、TSX、JavaScript、JSX 注入标准 `source.css` TextMate grammar，覆盖显式 `styled`、`css`、`globalStyle`、`keyframes` 的泛型、`.attrs(...)`、静态 element access、namespace 与 CSS prop 形态；静态 tag decoration 只说明 pattern match，不解析 import 或改写 token 前景色。
+- 使用 TypeScript AST 确认直接、别名和命名空间 `next-yak` import；识别 `styled.tag`、`styled(Component)`、类型参数、`.attrs(...)`、`css`、`globalStyle`、`keyframes`，并排除 type-only import、局部遮蔽和动态 tag path。
+- 将静态模板文本包装为虚拟 CSS 文档，使用 `vscode-css-languageservice` 提供属性、值、函数、at-rule、自定义属性补全，以及 hover、validation、代码操作和颜色信息。
+- 屏蔽 `${...}` 后保持 offset 对齐；插值位置由原生 TS/JS 接管，所有 hover、诊断、编辑和颜色 range 都拒绝触及插值或虚拟 wrapper 的结果。
+- 将 CSS 候选优先排序以降低 TSX 中 Emmet JSX 候选的遮挡；对 `a:`、`a::` 等根级选择器上下文补充伪类和伪元素候选。
+- 通过 `DiagnosticCollection` 暴露安全映射的 CSS 诊断，并以 `nextYak.css.validate` 按资源控制；代码操作目前只接受同文档、非重叠、单行的安全 CSS 编辑。
+- 注册 `DocumentColorProvider`，支持静态颜色装饰和 hex、`rgb`、`rgba`、`hsl`、命名颜色之间的 picker 表示转换；注释、字符串、插值和 wrapper 中的伪颜色会被拒绝。
 
-当前限制同样是实际行为：TextMate 高亮仍通过静态模式识别，不能证明导入来源；补全尚未做跨文件符号解析；没有 hover、诊断、代码操作或颜色 provider。已具备 Vitest 单元测试和 `@vscode/test-electron` Extension Host 集成测试。
+当前限制同样是实际行为：TextMate 高亮仍是静态模式，不能证明导入来源，也不会猜测别名；语义 provider 尚未做跨文件 re-export/barrel import 解析。用户 CSS custom data、CSS lint 配置映射、项目级 token/index、折叠、输入辅助、可配置 tag/import module 和跨平台 CI 仍未实现。Vitest 与 `@vscode/test-electron` 已覆盖 grammar scope、模板定位、补全、hover、诊断、快速修复、颜色、取消、缓存与 VSIX 打包路径。
 
 ## 功能对比
 
 | 能力 | 当前项目 | `vscode-styled-components` + `typescript-styled-plugin` | 差距与建议 |
 | --- | --- | --- | --- |
-| CSS 高亮 | 已有 next-yak 专用注入 grammar。 | 有更成熟的 styled-components grammar，覆盖许多历史 template 形式。 | 保持 next-yak 专用识别；补齐 next-yak 的泛型、`.attrs`、`css` prop 等真实 API 形式。 |
-| 模板识别 | 已使用 TypeScript AST 验证 `next-yak` import，支持别名、命名空间、常见 styled 链并排除局部遮蔽。 | TypeScript plugin 也以可配置 tag 名为中心，但可通过 tsserver 装饰器接入语言服务。 | 后续扩展跨文件符号解析与 next-yak 的更多 API 形态。 |
-| CSS 属性和值补全 | 已有，仅处理静态 CSS 位置。 | 有 CSS、SCSS、Emmet 候选合并，随 tsserver 提供给 TS/JS。 | 已达到 MVP；后续加入 next-yak 的模板形态和用户自定义 CSS 数据即可。 |
-| Hover | 未实现。 | TypeScript plugin 调用 SCSS language service 的 hover。 | 高价值：复用已有虚拟文档与位置映射实现 CSS hover。 |
-| CSS 诊断 | 未实现。 | 有语法/规则诊断，并把结果映射回 TS/JS 源文件。 | 高价值：提供 CSS 语法错误、未知属性等诊断；需要避免在 `${...}` 附近报误报。 |
-| 快速修复 | 未实现。 | 支持 CSS language service code actions，例如拼写修复。 | 在诊断映射稳定后实现。 |
-| 颜色功能 | 未实现。 | VS Code 扩展注册颜色 provider，支持色块与颜色表示转换。 | 中优先级：添加 `DocumentColorProvider` 与颜色表示转换。 |
+| CSS 高亮 | 注入标准 `source.css` grammar，覆盖显式泛型、`.attrs(...)`、静态 element access、namespace、CSS prop 和 keyframes；以低影响 tag decoration 标记静态 pattern match。 | 有更成熟的 styled-components grammar，覆盖许多历史 template 形式，并使用 `source.css.scss`。 | 保持 next-yak 专用、CSS-only 的静态结构识别；新增上游 API 形态时按四种宿主语言补 scope 与宿主恢复回归，不猜测 alias。 |
+| 模板识别 | TypeScript AST 验证 `next-yak` import，支持别名、命名空间、常见 styled 链、嵌套模板和静态 element access，并排除 type-only import 与局部遮蔽。 | TypeScript plugin 也以可配置 tag 名为中心，但可通过 tsserver 装饰器接入语言服务。 | 后续扩展跨文件 re-export/barrel import、用户确认的额外 tag 与 import module；不要让 TextMate pattern 代替语义判断。 |
+| CSS 属性和值补全 | 使用 CSS Language Service 处理静态 CSS 的属性、值、函数、at-rule、自定义属性和根级伪类/伪元素；CSS 项优先排序以降低 Emmet 遮挡。 | 有 CSS、SCSS、Emmet 候选合并，随 tsserver 提供给 TS/JS。 | P1 基线已完成；后续支持用户 CSS custom data、项目级 token/index，且不全局关闭 TSX/JSX Emmet。 |
+| Hover | 已实现 CSS 属性、文档化值/函数、伪类、伪元素和 keyframes hover，保留 CSS data 中的 MDN 链接并安全映射 range。 | TypeScript plugin 调用 SCSS language service 的 hover。 | 后续可让 custom data 与项目级定义进入 hover；继续拒绝插值、wrapper 和无文档 CSS 位置。 |
+| CSS 诊断 | 已实现 CSS Language Service validation、宿主 range 映射与 `nextYak.css.validate` 资源设置；过滤插值、wrapper 和已知插值邻接误报。 | 有语法/规则诊断，并把结果映射回 TS/JS 源文件。 | 后续映射可配置 CSS lint 与 custom data；next-yak 专属语义规则仍由项目配置的 `eslint-plugin-yak` 负责。 |
+| 快速修复 | 已映射安全 CSS code action，当前覆盖未知属性拼写等同文档、非重叠、单行编辑。 | 支持 CSS language service code actions，例如拼写修复。 | 在不放宽插值、wrapper、跨文档、命令或多行编辑安全边界的前提下，按实际需求扩展可接受 action。 |
+| 颜色功能 | 已注册 `DocumentColorProvider`；支持静态色块、渐变 stop、alpha 色与 hex、`rgb`、`rgba`、`hsl`、精确命名颜色转换。 | VS Code 扩展注册颜色 provider，支持色块与颜色表示转换。 | P1 基线已完成；可按用户反馈增加颜色开关或项目设计 token 集成，继续拒绝注释、字符串、插值和 wrapper。 |
 | 折叠 | 依赖宿主文档默认行为。 | TypeScript plugin 能返回模板折叠范围。 | 可在用户反馈需要时补充；优先级低于诊断和 hover。 |
-| 输入辅助 | 无。 | 提供展开模板的 snippet，以及接受属性后插入 `: ;` 的命令。 | 可选体验增强；不要为了模仿而破坏 VS Code 的默认 Enter 行为。 |
-| 配置 | tag 名和行为目前硬编码。 | 可配置 tags、lint、Emmet 选项。 | 中优先级：提供 next-yak 标签别名和自定义 CSS 数据配置；lint 规则应先采用 CSS language service 的能力。 |
+| 输入辅助 | 无独立编辑命令；CSS Language Service completion 已提供标准 CSS snippet。 | 提供展开模板的 snippet，以及接受属性后插入 `: ;` 的命令。 | 可选体验增强；不要为了模仿而破坏 VS Code 的默认 Enter 行为。 |
+| 配置 | 当前提供 `nextYak.css.validate`；tag 名、额外 import module、颜色装饰、Emmet 排序和 CSS data 仍不可配置。 | 可配置 tags、lint、Emmet 选项。 | 中优先级：支持确认过的额外 tag/import module、用户 CSS custom data 与 CSS lint 配置映射。 |
 | Emmet | 受 VS Code 对整个 TSX 文档语言的限制；CSS 项已优先排序。 | 自带 Emmet helper 合并，README 也承认存在 VS Code/TypeScript 上游限制。 | 不要用全局禁用 TSX Emmet 解决局部问题；保留现有 CSS 候选优先策略。 |
-| 自动化测试 | 已有 Vitest 单元测试和 `@vscode/test-electron` 集成测试，覆盖模板定位、插值、位置映射、别名、命名空间、遮蔽及伪类/伪元素补全。 | 有单元测试和端到端测试，覆盖补全、错误、快速修复、Emmet、outline；VS Code 扩展也有 grammar/颜色测试。 | 扩展到 hover、诊断、代码操作、颜色和 grammar token 场景。 |
+| 自动化测试 | Vitest 与 `@vscode/test-electron` 覆盖模板定位、插值、虚拟 range、四宿主 grammar scope、补全、hover、诊断、快速修复、颜色、取消、缓存、未保存/远程式 URI 与 VSIX 打包。 | 有单元测试和端到端测试，覆盖补全、错误、快速修复、Emmet、outline；VS Code 扩展也有 grammar/颜色测试。 | 后续补 CI 跨平台矩阵、最低/Insiders VS Code、custom data、项目级索引与发布前干净环境安装 smoke test。 |
 | 维护状态 | 本项目可按 next-yak 的当前版本演进。 | VS Code styled-components 仓库官方说明自 2024-06 起不再由团队维护；TypeScript plugin 默认分支的最近提交也较旧。 | 学习架构和测试策略，不应无审查地复制旧依赖、旧 grammar 或历史 API。 |
 
 ## 推荐实施顺序
@@ -77,14 +78,14 @@
 
 这是最重要的一步。若识别范围错误，后续 hover、诊断和快速修复都会在非 next-yak 模板中产生噪声。
 
-### P1：补齐语言功能
+### P1：补齐语言功能（已完成）
 
-1. 基于同一虚拟 CSS 文档实现 hover。
-2. 通过 `doValidation` 映射 CSS 诊断，并过滤插值占位区的误报。
-3. 将 CSS language service 的代码操作映射回原文，提供属性拼写等快速修复。
-4. 添加颜色 provider 和颜色表示转换。
+1. 已基于同一虚拟 CSS 文档实现 CSS hover，并拒绝插值和 wrapper 范围。
+2. 已通过 `doValidation` 映射 CSS 诊断，过滤插值占位区与已知插值邻接误报。
+3. 已将安全 CSS Language Service code action 映射回原文，提供未知属性拼写等快速修复。
+4. 已添加颜色 provider 与表示转换，包含安全 range 映射和精确命名颜色候选。
 
-这些能力的技术基础已经在当前虚拟文档映射中存在，不需要先引入独立 Language Server 或 tsserver plugin。
+这些能力已在独立 VS Code 扩展架构中完成，不需要为 P1 引入独立 Language Server 或 tsserver plugin。
 
 ### P2：扩展 next-yak 专属体验
 
