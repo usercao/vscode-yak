@@ -2730,26 +2730,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"next-yak-vscode@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "next-yak-vscode@workspace:."
-  dependencies:
-    "@types/color-name": "npm:^2.0.0"
-    "@types/node": "npm:^24"
-    "@types/vscode": "npm:^1.134.0"
-    "@vscode/test-electron": "npm:^3.1.0"
-    "@vscode/vsce": "npm:3.9.2"
-    color-name: "npm:^2.1.1"
-    tsdown: "npm:^0.22.14"
-    typescript: "npm:~6.0.2"
-    vitest: "npm:^4.1.11"
-    vscode-css-languageservice: "npm:^6.3.10"
-    vscode-languageserver-textdocument: "npm:^1.0.12"
-    vscode-oniguruma: "npm:^2.0.1"
-    vscode-textmate: "npm:^9.3.2"
-  languageName: unknown
-  linkType: soft
-
 "node-abi@npm:^3.3.0":
   version: 3.94.0
   resolution: "node-abi@npm:3.94.0"
@@ -4160,6 +4140,26 @@ __metadata:
   checksum: 10c0/5f6c9c10fd9b1664d71fab4e9fbbae6be93c7f75bb3a1d9d74399a88ab8649e99691223fd7cef4644376cac6e94fa2c086d802521b9a8e31c5af3e60f0f35624
   languageName: node
   linkType: hard
+
+"vscode-yak@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "vscode-yak@workspace:."
+  dependencies:
+    "@types/color-name": "npm:^2.0.0"
+    "@types/node": "npm:^24"
+    "@types/vscode": "npm:^1.134.0"
+    "@vscode/test-electron": "npm:^3.1.0"
+    "@vscode/vsce": "npm:3.9.2"
+    color-name: "npm:^2.1.1"
+    tsdown: "npm:^0.22.14"
+    typescript: "npm:~6.0.2"
+    vitest: "npm:^4.1.11"
+    vscode-css-languageservice: "npm:^6.3.10"
+    vscode-languageserver-textdocument: "npm:^1.0.12"
+    vscode-oniguruma: "npm:^2.0.1"
+    vscode-textmate: "npm:^9.3.2"
+  languageName: unknown
+  linkType: soft
 
 "whatwg-encoding@npm:^3.1.1":
   version: 3.1.1

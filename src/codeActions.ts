@@ -4,17 +4,17 @@ import type {
   TextEdit as CssTextEdit,
   WorkspaceEdit as CssWorkspaceEdit,
 } from 'vscode-css-languageservice'
-import type { VirtualCssDocument } from './nextYakHover'
-import { mapVirtualCssRangeToTemplateOffsets } from './nextYakDiagnostics'
-import type { NextYakTemplate, OffsetRange } from './nextYakTemplate'
+import type { VirtualCssDocument } from './hover'
+import { mapVirtualCssRangeToTemplateOffsets } from './diagnostics'
+import type { Template, OffsetRange } from './template'
 
-export interface NextYakCssTextEdit {
+export interface MappedCssTextEdit {
   newText: string
   range: OffsetRange
 }
 
-export interface NextYakCssCodeAction {
-  edits: readonly NextYakCssTextEdit[]
+export interface MappedCssCodeAction {
+  edits: readonly MappedCssTextEdit[]
   isPreferred?: boolean
   kind?: string
   title: string
@@ -22,9 +22,9 @@ export interface NextYakCssCodeAction {
 
 export function mapVirtualCssCodeAction(
   action: CssCodeAction,
-  template: NextYakTemplate,
+  template: Template,
   virtualCss: VirtualCssDocument,
-): NextYakCssCodeAction | undefined {
+): MappedCssCodeAction | undefined {
   if (!action.edit || action.command) {
     return undefined
   }
@@ -108,9 +108,9 @@ function isVirtualTextDocumentEdit(
 
 function mapVirtualCssTextEdit(
   edit: CssTextEdit,
-  template: NextYakTemplate,
+  template: Template,
   virtualCss: VirtualCssDocument,
-): NextYakCssTextEdit | undefined {
+): MappedCssTextEdit | undefined {
   if (
     !isValidVirtualRange(edit.range, virtualCss)
     || edit.range.start.line !== edit.range.end.line
@@ -143,7 +143,7 @@ function isExactVirtualPosition(
   return normalized.line === position.line && normalized.character === position.character
 }
 
-function hasOverlappingEdits(edits: readonly NextYakCssTextEdit[]) {
+function hasOverlappingEdits(edits: readonly MappedCssTextEdit[]) {
   const ordered = [...edits].sort((left, right) => left.range.start - right.range.start)
 
   return ordered.some((edit, index) => index > 0 && ordered[index - 1].range.end > edit.range.start)

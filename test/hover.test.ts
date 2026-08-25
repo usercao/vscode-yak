@@ -1,8 +1,8 @@
 import { getCSSLanguageService, type LanguageService } from 'vscode-css-languageservice'
 import { TextDocument } from 'vscode-languageserver-textdocument'
 import { describe, expect, it } from 'vitest'
-import { getNextYakCssHover, type VirtualCssDocument } from '../src/nextYakHover'
-import { createVirtualCssText, findNextYakTemplate, type NextYakTemplate } from '../src/nextYakTemplate'
+import { getMappedCssHover, type VirtualCssDocument } from '../src/hover'
+import { createVirtualCssText, findTemplate, type Template } from '../src/template'
 
 const cursorMarker = '/*cursor*/'
 const cssLanguageService = getCSSLanguageService()
@@ -15,24 +15,24 @@ function hoverAtCursor(sourceWithCursor: string) {
   }
 
   const source = sourceWithCursor.replace(cursorMarker, '')
-  const template = findNextYakTemplate(source, cursorOffset, 'typescriptreact', '/fixture.tsx')
+  const template = findTemplate(source, cursorOffset, 'typescriptreact', '/fixture.tsx')
 
   if (!template) {
     return { hover: undefined, source, template: undefined }
   }
 
   return {
-    hover: getNextYakCssHover(cssLanguageService, cursorOffset, template, createVirtualDocument(source, template)),
+    hover: getMappedCssHover(cssLanguageService, cursorOffset, template, createVirtualDocument(source, template)),
     source,
     template,
   }
 }
 
-function createVirtualDocument(source: string, template: NextYakTemplate): VirtualCssDocument {
+function createVirtualDocument(source: string, template: Template): VirtualCssDocument {
   const virtualCssText = createVirtualCssText(template)
 
   return {
-    document: TextDocument.create('next-yak:test', 'css', 1, virtualCssText.text),
+    document: TextDocument.create('yak:test', 'css', 1, virtualCssText.text),
     prefixLength: virtualCssText.prefixLength,
     sourceLength: template.maskedBody.length,
     sourceStart: template.bodyStart,
@@ -41,7 +41,7 @@ function createVirtualDocument(source: string, template: NextYakTemplate): Virtu
 
 function styledSource(css: string): string {
   return [
-    "import { styled } from 'next-yak'",
+    "import { styled } from 'yak'",
     'const Panel = styled.div`',
     `  ${css}`,
     '`',
@@ -58,7 +58,7 @@ function hoverMarkdownValue(hover: ReturnType<typeof hoverAtCursor>['hover']): s
   return typeof first === 'string' ? first : 'value' in first ? first.value : undefined
 }
 
-describe('next-yak CSS hover', () => {
+describe('yak CSS hover', () => {
   it('maps property hover Markdown and its full declaration range back to the host document', () => {
     const source = styledSource('display/*cursor*/: grid;')
     const result = hoverAtCursor(source)
@@ -88,7 +88,7 @@ describe('next-yak CSS hover', () => {
 
   it('returns property hover inside keyframes but not for keyframe selectors', () => {
     const property = hoverAtCursor([
-      "import { keyframes } from 'next-yak'",
+      "import { keyframes } from 'yak'",
       'const fade = keyframes`',
       '  from {',
       '    op/*cursor*/acity: 0;',
@@ -96,7 +96,7 @@ describe('next-yak CSS hover', () => {
       '`',
     ].join('\n')).hover
     const keyframeSelector = hoverAtCursor([
-      "import { keyframes } from 'next-yak'",
+      "import { keyframes } from 'yak'",
       'const fade = keyframes`',
       '  fr/*cursor*/om {',
       '    opacity: 0;',
@@ -115,10 +115,10 @@ describe('next-yak CSS hover', () => {
     const sourceWithCursor = styledSource('color/*cursor*/: red;')
     const cursorOffset = sourceWithCursor.indexOf(cursorMarker)
     const source = sourceWithCursor.replace(cursorMarker, '')
-    const template = findNextYakTemplate(source, cursorOffset, 'typescriptreact', '/fixture.tsx')
+    const template = findTemplate(source, cursorOffset, 'typescriptreact', '/fixture.tsx')
 
     if (!template) {
-      throw new Error('Expected a static next-yak template')
+      throw new Error('Expected a static yak template')
     }
 
     const virtualCss = createVirtualDocument(source, template)
@@ -133,7 +133,7 @@ describe('next-yak CSS hover', () => {
       }),
       parseStylesheet: () => ({}),
     }
-    const wrapperOnly = getNextYakCssHover(wrapperOnlyService, cursorOffset, template, virtualCss)
+    const wrapperOnly = getMappedCssHover(wrapperOnlyService, cursorOffset, template, virtualCss)
 
     expect(interpolation).toBeUndefined()
     expect(invalid).toBeUndefined()

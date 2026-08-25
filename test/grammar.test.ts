@@ -46,8 +46,8 @@ async function loadGrammar(scopeName: string) {
   await onigurumaReady
 
   const grammarPaths: Record<string, string> = {
-    'next-yak.injection': join(workspaceRoot, 'syntaxes/next-yak.injection.json'),
-    'next-yak-js.injection': join(workspaceRoot, 'syntaxes/next-yak-js.injection.json'),
+    'yak.injection': join(workspaceRoot, 'syntaxes/typescript.injection.json'),
+    'yak-js.injection': join(workspaceRoot, 'syntaxes/javascript.injection.json'),
     'source.css': join(vscodeExtensionsRoot, 'css/syntaxes/css.tmLanguage.json'),
     'source.js': join(vscodeExtensionsRoot, 'javascript/syntaxes/JavaScript.tmLanguage.json'),
     'source.js.jsx': join(vscodeExtensionsRoot, 'javascript/syntaxes/JavaScriptReact.tmLanguage.json'),
@@ -65,9 +65,9 @@ async function loadGrammar(scopeName: string) {
     },
     getInjections: (requestedScopeName) => {
       return requestedScopeName === 'source.ts' || requestedScopeName === 'source.tsx'
-        ? ['next-yak.injection']
+        ? ['yak.injection']
         : requestedScopeName === 'source.js' || requestedScopeName === 'source.js.jsx'
-          ? ['next-yak-js.injection']
+          ? ['yak-js.injection']
           : []
     },
   })
@@ -87,7 +87,7 @@ function scopesAtOffset(line: string, tokens: readonly { endIndex: number; scope
   return token.scopes
 }
 
-describe('next-yak TextMate grammar', () => {
+describe('yak TextMate grammar', () => {
   it.each([
     ['TypeScript', 'source.ts'],
     ['TypeScript React', 'source.tsx'],
@@ -102,8 +102,8 @@ describe('next-yak TextMate grammar', () => {
 
     let ruleStack = INITIAL
     const lines = [
-      "import { globalStyle, keyframes, styled } from 'next-yak'",
-      "import * as yak from 'next-yak'",
+      "import { globalStyle, keyframes, styled } from 'yak'",
+      "import * as yak from 'yak'",
       'const Attrs = styled.div.attrs({ role: createRole("region") })`',
       '  color: red;',
       '`',
@@ -152,7 +152,7 @@ describe('next-yak TextMate grammar', () => {
 
     let ruleStack = INITIAL
     const lines = [
-      "import { styled } from 'next-yak'",
+      "import { styled } from 'yak'",
       'type Props = { tone: string }',
       'const Generic = styled.div<Props>`',
       '  color: red;',
@@ -195,8 +195,8 @@ describe('next-yak TextMate grammar', () => {
 
     let ruleStack = INITIAL
     const lines = [
-      "import { css } from 'next-yak'",
-      "import * as yak from 'next-yak'",
+      "import { css } from 'yak'",
+      "import * as yak from 'yak'",
       'const Direct = <section css={css`',
       '  color: red;',
       '`} />',
@@ -263,7 +263,7 @@ describe('next-yak TextMate grammar', () => {
 
     let ruleStack = INITIAL
     const lines = [
-      "import { styled } from 'next-yak'",
+      "import { styled } from 'yak'",
       'const Link = styled.a`',
       '  a:hover',
       '  a::before',
@@ -324,7 +324,7 @@ describe('next-yak TextMate grammar', () => {
       })
     }
     const lines = [
-      "import { keyframes } from 'next-yak'",
+      "import { keyframes } from 'yak'",
       'const spin = keyframes`',
       '  from { transform: rotate(0deg); }',
       '  0%, 50%, 72%, 100% { opacity: 0.5; }',
@@ -359,7 +359,7 @@ describe('next-yak TextMate grammar', () => {
     expect(scopesAtOffset(lines[6], tokenizedLines[6], lines[6].indexOf('const'))).not.toContain('source.css')
 
     const incompleteLines = [
-      "import { keyframes } from 'next-yak'",
+      "import { keyframes } from 'yak'",
       'const spin = keyframes`',
       '  50',
       '`',
@@ -372,7 +372,7 @@ describe('next-yak TextMate grammar', () => {
     )
 
     const openStepLines = [
-      "import { keyframes } from 'next-yak'",
+      "import { keyframes } from 'yak'",
       'const spin = keyframes`',
       '  from {',
       '`',

@@ -1,24 +1,24 @@
 {
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-  "scopeName": "next-yak-js.injection",
+  "scopeName": "yak-js.injection",
   "injectionSelector": "L:source.js, L:source.js.jsx",
   "patterns": [
     {
-      "name": "meta.embedded.block.css.next-yak",
+      "name": "meta.embedded.block.css.yak",
       "contentName": "source.css",
       "begin": "(?<![_$[:alnum:].])(?:(?:[_$[:alpha:]][_$[:alnum:]]*)\\s*\\.\\s*)?(styled)(?:\\s*\\.\\s*[_$[:alpha:]][_$[:alnum:]]*(?:\\s*<[^`\\n]*>)?|\\s*\\[\\s*['\"][^'\"`\\n]+['\"]\\s*\\](?:\\s*<[^`\\n]*>)?|\\s*\\([^`\\n]*\\)(?:\\s*<[^`\\n]*>)?)(?:\\s*\\.\\s*attrs(?:\\s*<[^`\\n]*>)?\\s*\\([^`\\n]*\\))*\\s*(`)",
       "beginCaptures": {
         "1": {
-          "name": "entity.name.function.tagged-template.next-yak"
+          "name": "entity.name.function.tagged-template.yak"
         },
         "2": {
-          "name": "punctuation.definition.string.template.begin.next-yak"
+          "name": "punctuation.definition.string.template.begin.yak"
         }
       },
       "end": "`",
       "endCaptures": {
         "0": {
-          "name": "punctuation.definition.string.template.end.next-yak"
+          "name": "punctuation.definition.string.template.end.yak"
         }
       },
       "patterns": [
@@ -40,21 +40,21 @@
       ]
     },
     {
-      "name": "meta.embedded.block.css.next-yak",
+      "name": "meta.embedded.block.css.yak",
       "contentName": "source.css",
       "begin": "(?<![_$[:alnum:].])(?:(?:[_$[:alpha:]][_$[:alnum:]]*)\\s*\\.\\s*)?(css|globalStyle)\\s*(`)",
       "beginCaptures": {
         "1": {
-          "name": "entity.name.function.tagged-template.next-yak"
+          "name": "entity.name.function.tagged-template.yak"
         },
         "2": {
-          "name": "punctuation.definition.string.template.begin.next-yak"
+          "name": "punctuation.definition.string.template.begin.yak"
         }
       },
       "end": "`",
       "endCaptures": {
         "0": {
-          "name": "punctuation.definition.string.template.end.next-yak"
+          "name": "punctuation.definition.string.template.end.yak"
         }
       },
       "patterns": [
@@ -76,21 +76,21 @@
       ]
     },
     {
-      "name": "meta.embedded.block.css.next-yak",
+      "name": "meta.embedded.block.css.yak",
       "contentName": "source.css",
       "begin": "(?<![_$[:alnum:].])(?:(?:[_$[:alpha:]][_$[:alnum:]]*)\\s*\\.\\s*)?(keyframes)\\s*(`)",
       "beginCaptures": {
         "1": {
-          "name": "entity.name.function.tagged-template.next-yak"
+          "name": "entity.name.function.tagged-template.yak"
         },
         "2": {
-          "name": "punctuation.definition.string.template.begin.next-yak"
+          "name": "punctuation.definition.string.template.begin.yak"
         }
       },
       "end": "`",
       "endCaptures": {
         "0": {
-          "name": "punctuation.definition.string.template.end.next-yak"
+          "name": "punctuation.definition.string.template.end.yak"
         }
       },
       "patterns": [
@@ -197,13 +197,13 @@
       "begin": "\\$\\{",
       "beginCaptures": {
         "0": {
-          "name": "punctuation.definition.template-expression.begin.next-yak"
+          "name": "punctuation.definition.template-expression.begin.yak"
         }
       },
       "end": "\\}",
       "endCaptures": {
         "0": {
-          "name": "punctuation.definition.template-expression.end.next-yak"
+          "name": "punctuation.definition.template-expression.end.yak"
         }
       },
       "patterns": [
@@ -215,7 +215,7 @@
     "root-declaration": {
       "patterns": [
         {
-          "name": "meta.property-list.next-yak",
+          "name": "meta.property-list.yak",
           "contentName": "meta.property-value.css",
           "begin": "(?m)^(\\s*)(--[-_a-zA-Z][-_a-zA-Z0-9]*)(\\s*:\\s*)",
           "beginCaptures": {
@@ -242,7 +242,7 @@
           ]
         },
         {
-          "name": "meta.property-list.next-yak",
+          "name": "meta.property-list.yak",
           "contentName": "meta.property-value.css",
           "begin": "(?m)^(\\s*)([a-zA-Z-]+)(\\s*:\\s*)",
           "beginCaptures": {

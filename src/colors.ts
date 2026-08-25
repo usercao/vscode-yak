@@ -6,44 +6,44 @@ import type {
   TextEdit as CssTextEdit,
 } from 'vscode-css-languageservice'
 import colorNames from 'color-name'
-import { mapTemplateRangeToVirtualCssRange, mapVirtualCssRangeToTemplateOffsets } from './nextYakDiagnostics'
-import type { VirtualCssDocument } from './nextYakHover'
-import type { NextYakTemplate, OffsetRange } from './nextYakTemplate'
+import { mapTemplateRangeToVirtualCssRange, mapVirtualCssRangeToTemplateOffsets } from './diagnostics'
+import type { VirtualCssDocument } from './hover'
+import type { Template, OffsetRange } from './template'
 
-export interface NextYakCssColor {
+export interface MappedCssColor {
   color: CssColor
   range: OffsetRange
 }
 
-export interface NextYakCssColorTextEdit {
+export interface MappedCssColorTextEdit {
   newText: string
   range: OffsetRange
 }
 
-export interface NextYakCssColorPresentation {
-  additionalTextEdits?: readonly NextYakCssColorTextEdit[]
+export interface MappedCssColorPresentation {
+  additionalTextEdits?: readonly MappedCssColorTextEdit[]
   label: string
-  textEdit: NextYakCssColorTextEdit
+  textEdit: MappedCssColorTextEdit
 }
 
-export function getNextYakCssColors(
+export function getMappedCssColors(
   cssLanguageService: LanguageService,
-  template: NextYakTemplate,
+  template: Template,
   virtualCss: VirtualCssDocument,
-): NextYakCssColor[] {
+): MappedCssColor[] {
   const stylesheet = cssLanguageService.parseStylesheet(virtualCss.document)
 
   return cssLanguageService.findDocumentColors(virtualCss.document, stylesheet)
     .flatMap((colorInformation) => mapVirtualCssColorInformation(colorInformation, template, virtualCss))
 }
 
-export function getNextYakCssColorPresentations(
+export function getMappedCssColorPresentations(
   cssLanguageService: LanguageService,
   color: CssColor,
   range: OffsetRange,
-  template: NextYakTemplate,
+  template: Template,
   virtualCss: VirtualCssDocument,
-): NextYakCssColorPresentation[] {
+): MappedCssColorPresentation[] {
   if (!isCssColorRange(range, template)) {
     return []
   }
@@ -69,9 +69,9 @@ export function getNextYakCssColorPresentations(
 
 export function mapVirtualCssColorInformation(
   colorInformation: CssColorInformation,
-  template: NextYakTemplate,
+  template: Template,
   virtualCss: VirtualCssDocument,
-): NextYakCssColor[] {
+): MappedCssColor[] {
   const range = mapVirtualCssColorRangeToTemplateOffsets(colorInformation.range, template, virtualCss)
 
   return range ? [{ color: colorInformation.color, range }] : []
@@ -79,9 +79,9 @@ export function mapVirtualCssColorInformation(
 
 export function mapVirtualCssColorPresentation(
   presentation: CssColorPresentation,
-  template: NextYakTemplate,
+  template: Template,
   virtualCss: VirtualCssDocument,
-): NextYakCssColorPresentation[] {
+): MappedCssColorPresentation[] {
   if (!presentation.textEdit) {
     return []
   }
@@ -110,9 +110,9 @@ export function mapVirtualCssColorPresentation(
 
 function mapVirtualCssColorTextEdit(
   edit: CssTextEdit,
-  template: NextYakTemplate,
+  template: Template,
   virtualCss: VirtualCssDocument,
-): NextYakCssColorTextEdit | undefined {
+): MappedCssColorTextEdit | undefined {
   const range = mapVirtualCssColorRangeToTemplateOffsets(edit.range, template, virtualCss)
 
   return range ? { newText: edit.newText, range } : undefined
@@ -120,7 +120,7 @@ function mapVirtualCssColorTextEdit(
 
 function mapVirtualCssColorRangeToTemplateOffsets(
   range: CssColorInformation['range'],
-  template: NextYakTemplate,
+  template: Template,
   virtualCss: VirtualCssDocument,
 ): OffsetRange | undefined {
   const sourceRange = mapVirtualCssRangeToTemplateOffsets(range, template, virtualCss)
@@ -131,9 +131,9 @@ function mapVirtualCssColorRangeToTemplateOffsets(
 function getNamedColorPresentation(
   color: CssColor,
   virtualRange: CssColorInformation['range'],
-  template: NextYakTemplate,
+  template: Template,
   virtualCss: VirtualCssDocument,
-): NextYakCssColorPresentation | undefined {
+): MappedCssColorPresentation | undefined {
   if (color.alpha !== 1) {
     return undefined
   }
@@ -168,7 +168,7 @@ function toExactColorByte(channel: number) {
   return Math.abs(byte - roundedByte) < 0.000_001 ? roundedByte : undefined
 }
 
-function isCssColorRange(range: OffsetRange, template: NextYakTemplate) {
+function isCssColorRange(range: OffsetRange, template: Template) {
   const start = range.start - template.bodyStart
   const end = range.end - template.bodyStart
 
@@ -222,7 +222,7 @@ function getCssProtectedRanges(text: string): OffsetRange[] {
   return ranges
 }
 
-function hasOverlappingEdits(edits: readonly NextYakCssColorTextEdit[]) {
+function hasOverlappingEdits(edits: readonly MappedCssColorTextEdit[]) {
   const ordered = [...edits].sort((left, right) => left.range.start - right.range.start)
 
   return ordered.some((edit, index) => index > 0 && ordered[index - 1].range.end > edit.range.start)

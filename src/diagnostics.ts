@@ -3,23 +3,23 @@ import type {
   LanguageService,
   Range as CssRange,
 } from 'vscode-css-languageservice'
-import type { VirtualCssDocument } from './nextYakHover'
+import type { VirtualCssDocument } from './hover'
 import {
   mapVirtualRangeToSourceOffsets,
-  type NextYakTemplate,
+  type Template,
   type OffsetRange,
-} from './nextYakTemplate'
+} from './template'
 
-export interface NextYakCssDiagnostic {
+export interface MappedCssDiagnostic {
   diagnostic: CssDiagnostic
   range: OffsetRange
 }
 
-export function getNextYakCssDiagnostics(
+export function getMappedCssDiagnostics(
   cssLanguageService: LanguageService,
-  template: NextYakTemplate,
+  template: Template,
   virtualCss: VirtualCssDocument,
-): NextYakCssDiagnostic[] {
+): MappedCssDiagnostic[] {
   const stylesheet = cssLanguageService.parseStylesheet(virtualCss.document)
 
   return cssLanguageService.doValidation(virtualCss.document, stylesheet)
@@ -32,7 +32,7 @@ export function getNextYakCssDiagnostics(
 
 export function mapVirtualCssRangeToTemplateOffsets(
   range: CssRange,
-  template: NextYakTemplate,
+  template: Template,
   virtualCss: VirtualCssDocument,
   diagnostic?: CssDiagnostic,
 ): OffsetRange | undefined {
@@ -64,7 +64,7 @@ export function mapVirtualCssRangeToTemplateOffsets(
 
 export function mapTemplateRangeToVirtualCssRange(
   range: OffsetRange,
-  template: NextYakTemplate,
+  template: Template,
   virtualCss: VirtualCssDocument,
 ): CssRange | undefined {
   if (!isStaticTemplateRange(range, template, virtualCss)) {
@@ -82,7 +82,7 @@ export function mapTemplateRangeToVirtualCssRange(
 
 function isStaticTemplateRange(
   range: OffsetRange,
-  template: NextYakTemplate,
+  template: Template,
   virtualCss: VirtualCssDocument,
 ) {
   if (
@@ -105,7 +105,7 @@ function isStaticTemplateRange(
 
 function isInterpolationAdjacentValueDiagnostic(
   range: CssRange,
-  template: NextYakTemplate,
+  template: Template,
   virtualCss: VirtualCssDocument,
   diagnostic: CssDiagnostic | undefined,
 ) {

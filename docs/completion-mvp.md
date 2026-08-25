@@ -1,12 +1,12 @@
-# next-yak VS Code 补全 MVP
+# vscode-yak VS Code 补全 MVP
 
 ## 目标
 
-为 TypeScript、TSX、JavaScript 和 JSX 中的 next-yak tagged template 提供 CSS 属性和值补全。当前版本覆盖单文件中的静态 CSS 区域、TypeScript AST 导入识别与自动化测试；暂不实现 hover、诊断或工作区索引。
+为 TypeScript、TSX、JavaScript 和 JSX 中的 yak tagged template 提供 CSS 属性和值补全。当前版本覆盖单文件中的静态 CSS 区域、TypeScript AST 导入识别与自动化测试；暂不实现 hover、诊断或工作区索引。
 
 ## 实现
 
-运行时入口位于 [`src/extension.ts`](../src/extension.ts)。模板定位、插值扫描和虚拟 CSS 映射位于 [`src/nextYakTemplate.ts`](../src/nextYakTemplate.ts)。扩展在 TypeScript、TSX、JavaScript 与 JSX 文档激活后注册一个 `CompletionItemProvider`，并通过 TypeScript AST 确认 tag 的绑定来自 `next-yak`。
+运行时入口位于 [`src/extension.ts`](../src/extension.ts)。模板定位、插值扫描和虚拟 CSS 映射位于 [`src/template.ts`](../src/template.ts)。扩展在 TypeScript、TSX、JavaScript 与 JSX 文档激活后注册一个 `CompletionItemProvider`，并通过 TypeScript AST 确认 tag 的绑定来自 `yak`。
 
 支持下列形式：
 
@@ -21,13 +21,13 @@ yak.css`...`
 styled.div.attrs({})`...`
 ```
 
-其中 `s` 可以是 `styled` 的具名别名，`yak` 可以是 `import * as yak from 'next-yak'` 的命名空间绑定。局部同名参数或变量不会触发 next-yak CSS 补全。
+其中 `s` 可以是 `styled` 的具名别名，`yak` 可以是 `import * as yak from 'yak'` 的命名空间绑定。局部同名参数或变量不会触发 yak CSS 补全。
 
 补全流程如下：
 
 ```mermaid
 flowchart TD
-  request[TS / TSX 中请求补全] --> locate[定位标准 next-yak 模板]
+  request[TS / TSX 中请求补全] --> locate[定位标准 yak 模板]
   locate --> template{光标位于模板静态 CSS？}
   template -- 否 --> fallback[返回 undefined]
   template -- 是 --> mask[将 ${...} 替换为等长空白]
@@ -57,12 +57,12 @@ flowchart TD
 
 ## 范围与限制
 
-- 补全依据 TypeScript AST 的 import binding 识别 `next-yak`，支持具名别名和命名空间导入，并排除局部遮蔽。
+- 补全依据 TypeScript AST 的 import binding 识别 `yak`，支持具名别名和命名空间导入，并排除局部遮蔽。
 - 支持 `styled(Component)`、类型参数和 `.attrs(...)` 等链式 styled 形式；TextMate 高亮 grammar 仍只能按静态文本识别。
 - 插值扫描可处理常见的字符串、注释、对象花括号和嵌套模板，但不是完整的 TypeScript 解析器。
 - 不支持 CSS 模板以外的 JavaScript/TSX 语法补全。
 
-这些限制是当前实现有意保留的边界。后续若需要跨文件符号解析或更复杂的 next-yak API 识别，应在现有 TypeScript AST 路径上扩展。
+这些限制是当前实现有意保留的边界。后续若需要跨文件符号解析或更复杂的 yak API 识别，应在现有 TypeScript AST 路径上扩展。
 
 ## 构建与验证
 

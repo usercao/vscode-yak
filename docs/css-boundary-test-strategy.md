@@ -1,12 +1,12 @@
-# next-yak VS Code CSS 边界测试策略
+# vscode-yak CSS 边界测试策略
 
-> 本文收录主 TODO 中 P1「标准 CSS 语法高亮与 at-rule 补全」的详细验收项、测试矩阵和回归收录规则。总路线图见 [next-yak-vscode-todo.md](next-yak-vscode-todo.md)。
+> 本文收录主 TODO 中 P1「标准 CSS 语法高亮与 at-rule 补全」的详细验收项、测试矩阵和回归收录规则。总路线图见 [todo.md](todo.md)。
 >
 > 更新日期：2026-08-25。
 
 ## 目的
 
-这不是一份“覆盖全部 CSS 语法”的承诺。next-yak 扩展将 JavaScript/TypeScript 中的 tagged template 映射为虚拟 CSS，再分别交由 TextMate grammar、CSS Language Service 和 VS Code provider 处理；因此一个用户可见问题可能发生在不同层，不能只靠不断添加同类型 TODO 解决。
+这不是一份“覆盖全部 CSS 语法”的承诺。yak 扩展将 JavaScript/TypeScript 中的 tagged template 映射为虚拟 CSS，再分别交由 TextMate grammar、CSS Language Service 和 VS Code provider 处理；因此一个用户可见问题可能发生在不同层，不能只靠不断添加同类型 TODO 解决。
 
 本文的完成标准是：对每种已支持的用户体验，在其实际所有者处建立最小、可重复的回归用例；新发现的真实问题先归类，再变成 fixture。覆盖范围随真实使用和上游 CSS 数据演进扩大，但不会要求对所有语法维度做笛卡尔积穷举。
 
@@ -14,16 +14,16 @@
 
 - 目标范围是标准 CSS、现代 CSS nesting、媒体查询、keyframes 和由打包的 `vscode-css-languageservice` CSS data 支持的 at-rule。
 - 不将 Sass、SCSS 或 Less 的 `$variable`、`@mixin`、`@include` 或 Less mixin 作为支持目标。
-- TextMate grammar 是静态文本匹配，不能验证 `styled` 是否真的从 `next-yak` 导入；补全、hover 等语义 provider 必须继续以 TypeScript AST binding 判断为准。
+- TextMate grammar 是静态文本匹配，不能验证 `styled` 是否真的从 `yak` 导入；补全、hover 等语义 provider 必须继续以 TypeScript AST binding 判断为准。
 - 不因缺少某个上游候选而伪造不安全的编辑。无法安全映射到宿主文档的 CSS Language Service 结果必须拒绝。
-- 这里的 fixture 关注编辑器可见行为，不取代浏览器 CSS 渲染、next-yak 编译结果或完整 TypeScript 类型测试。
+- 这里的 fixture 关注编辑器可见行为，不取代浏览器 CSS 渲染、yak 编译结果或完整 TypeScript 类型测试。
 
 ## 测试分层
 
 | 层级 | 直接所有者 | 适合证明的内容 | 主要测试位置 |
 | --- | --- | --- | --- |
-| TextMate grammar | `syntaxes/next-yak.injection.json`、`syntaxes/next-yak-js.injection.json` | CSS 是否被注入、关键 token 是否拥有正确 CSS scope、宿主 JS/TSX 是否在模板后恢复 | [test/grammar.test.ts](../test/grammar.test.ts) |
-| 模板与虚拟 CSS | `src/nextYakTemplate.ts` | tagged template 定位、插值屏蔽、wrapper、光标归属和 virtual-to-source range 映射 | [test/nextYakTemplate.test.ts](../test/nextYakTemplate.test.ts) |
+| TextMate grammar | `syntaxes/typescript.injection.json`、`syntaxes/javascript.injection.json` | CSS 是否被注入、关键 token 是否拥有正确 CSS scope、宿主 JS/TSX 是否在模板后恢复 | [test/grammar.test.ts](../test/grammar.test.ts) |
+| 模板与虚拟 CSS | `src/template.ts` | tagged template 定位、插值屏蔽、wrapper、光标归属和 virtual-to-source range 映射 | [test/template.test.ts](../test/template.test.ts) |
 | 补全转换 | `src/extension.ts` | CSS Language Service 项目是否被过滤、候选排序、snippet 和 replacement range 是否安全 | 对应的纯函数测试；没有纯函数边界时保持实现局部 |
 | Extension Host | provider 注册和真实 VS Code API | 用户会看到的候选、编辑后替换范围、跨语言、取消请求与缓存失效 | [test/integration/extensionHost.ts](../test/integration/extensionHost.ts) |
 
@@ -31,7 +31,7 @@
 
 ## 当前基线与完成状态
 
-现有测试已经覆盖四种宿主语言、常见 next-yak tagged template、插值隔离、虚拟 range、防止 at-rule 走伪类回退、keyframes 内的属性补全、取消请求和连续请求性能。
+现有测试已经覆盖四种宿主语言、常见 yak tagged template、插值隔离、虚拟 range、防止 at-rule 走伪类回退、keyframes 内的属性补全、取消请求和连续请求性能。
 
 本轮 P1 已补齐以下用户可见行为：
 
@@ -46,7 +46,7 @@
 
 - [x] **CSS-B01: keyframe 关键字步骤高亮。** `from` 和 `to` 使用原生 CSS keyframe selector scope，且不被误标为普通元素选择器或裸声明。
 - [x] **CSS-B02: keyframe 百分比步骤高亮。** `0%`、`50%`、`100%` 与逗号分隔百分比步骤使用原生 percentage scope；步骤块中的属性和值函数仍按 CSS 处理。
-- [x] **CSS-B03: at-rule 名称候选。** 在静态 next-yak CSS 的合法名称位置输入 `@` 或前缀时，提供以 `@media` 为最低基线的候选，并以宿主 source offset 建立安全 replacement range。
+- [x] **CSS-B03: at-rule 名称候选。** 在静态 yak CSS 的合法名称位置输入 `@` 或前缀时，提供以 `@media` 为最低基线的候选，并以宿主 source offset 建立安全 replacement range。
 - [x] **CSS-B04: at-rule 候选数据策略。** 基于当前 `vscode-css-languageservice` CSS data 及位置白名单审查并覆盖 `@media`、`@supports`、`@container`、`@layer`、`@scope`、`@keyframes`、`@font-face` 和 `@property`。
 - [x] **CSS-B05: at-rule 上下文分流。** 区分名称、prelude、规则块和 descriptor block；prelude 使用安全拒绝，规则和 descriptor 块不会混入伪选择器或位置不适用的 at-rule。
 - [x] **CSS-B06: 非法位置拒绝。** 属性值、注释、字符串、`url(...)`、`${...}` 插值、descriptor/keyframes wrapper 及无法完整映射的 Language Service range 中均拒绝 at-rule 补全。
@@ -60,7 +60,7 @@
 | 维度 | 必选代表状态 | 主要层级 | 选择原则 |
 | --- | --- | --- | --- |
 | 宿主语言 | `ts`、`tsx`、`js`、`jsx` | grammar | CSS 注入规则分别依赖 TS/JS grammar；四种语言均需有关键 scope 断言 |
-| next-yak tag | 直接 `keyframes`、直接 `styled.*`、`globalStyle` | grammar / Extension Host | grammar 只验证它能静态识别的形态；provider 按 tag 的合法 at-rule 位置收紧候选 |
+| yak tag | 直接 `keyframes`、直接 `styled.*`、`globalStyle` | grammar / Extension Host | grammar 只验证它能静态识别的形态；provider 按 tag 的合法 at-rule 位置收紧候选 |
 | 语义 tag | 具名别名、命名空间、`.attrs(...)`、`styled(Component)` | grammar + Extension Host | grammar 覆盖显式结构的 CSS scope；别名和 import ownership 继续由 AST binding 覆盖，未知别名不得被静态 grammar 猜测为 CSS |
 | keyframe step | `from`、`to`、`0%`、逗号分隔的 `68%, 72%` | grammar；必要时模板层 | 同时覆盖关键字、数值和同一 selector list 中的逗号 |
 | at-rule 名称 | `@`、`@med` | Extension Host | 分别验证空前缀和部分输入的候选及 edit range |
@@ -101,7 +101,7 @@ const Panel = styled.div`
 该 fixture 至少证明：
 
 - 根级 `@` 和 `@med` 存在 `@media` 候选；应用候选只替换当前 at-rule 前缀。
-- `@media` prelude 不暴露不可靠的 next-yak 候选；block 内的 `gri` 仍获得 CSS 属性候选，不退化为伪选择器候选。
+- `@media` prelude 不暴露不可靠的 yak 候选；block 内的 `gri` 仍获得 CSS 属性候选，不退化为伪选择器候选。
 - 在 `color: @`、注释、字符串、`url(@asset)` 和 `${condition}` 内没有 at-rule 候选。
 - 在 `globalStyle` 的 `@font-face { font-... }` 与 `@property --size { syntax: ... }` 中验证与普通 rule 不同的 descriptor 候选上下文。
 
@@ -112,7 +112,7 @@ const Panel = styled.div`
 - 断言关键 lexeme 是否包含预期 CSS scope，而不是断言全部 scope 字符串或主题颜色。
 - 每个新增 grammar 规则同时加入一个模板结束后的 TS/JSX lexeme 断言，防止贪婪 match 破坏后续宿主高亮。
 - 对四种宿主语言至少保留 keyframes 的完整 fixture 和一个不完整编辑态 fixture；没有行为差异的普通 CSS 属性无需四倍复制。
-- 静态 grammar 可能会高亮非 `next-yak` 的同形 tagged template，这属于已知限制。该限制要以负向测试记录，不能让它阻塞 AST 语义 provider 的正确性。
+- 静态 grammar 可能会高亮非 `yak` 的同形 tagged template，这属于已知限制。该限制要以负向测试记录，不能让它阻塞 AST 语义 provider 的正确性。
 - 对泛型、`.attrs(...)`、静态 element access、namespace API 和 CSS prop 等显式结构，四种宿主语言均应验证 CSS scope 与模板结束后的宿主 scope 恢复。alias 不应由 grammar 猜测；它只由 AST provider 确认。
 - 扩展可以为静态 pattern match 的 tag 添加不读取 import 的低影响 decoration，帮助用户辨认其静态性质；不得以 decoration 覆盖 CSS/TypeScript 前景 token，或暗示该模板已通过语义 binding 校验。
 
@@ -133,7 +133,7 @@ const Panel = styled.div`
 
 上游仓库已归档，但它的测试演进很适合借鉴方法，而不适合直接复制 grammar 或 Sass/SCSS 规则。
 
-| 上游经验 | 对 next-yak 的做法 |
+| 上游经验 | 对 yak 的做法 |
 | --- | --- |
 | [colorization.test.js](https://github.com/styled-components/vscode-styled-components/blob/main/src/tests/suite/colorization.test.js) 自动枚举最小 fixture，并保存 token 结果 | 以每个真实问题的最小复现为 fixture；当前优先沿用确定性的关键 scope 断言，待 corpus 变大再评估轻量 golden 机制 |
 | [keyframes fixture](https://github.com/styled-components/vscode-styled-components/blob/main/src/tests/suite/colorize-fixtures/keyframes.js) 同时覆盖 `from`、`to` 和逗号分隔百分比步骤 | 将 CSS-B01、CSS-B02 作为一个小型 grammar corpus 的第一个 fixture，而不是只修 `from` |
@@ -143,7 +143,7 @@ const Panel = styled.div`
 | [#292](https://github.com/styled-components/vscode-styled-components/issues/292) 表明 `.attrs(...)` 中的复杂括号可使后续整份文件高亮失真 | 每次扩展 grammar 的终止条件，都在 fixture 尾部放入普通 TS/JSX，确认 scope 能恢复 |
 | [#388](https://github.com/styled-components/vscode-styled-components/pull/388) 显示 VS Code 升级会改变 scope/token 输出 | 不把上游或 VS Code 自身的完整 token 细节当作扩展契约；升级后先判断是自身语义回归，还是宿主 scope 漂移，再有意更新预期 |
 
-结论是：fixture/golden 的价值在于记录真实故障，不在于把 CSS 语法表完整镜像一遍。next-yak 的 provider 与 grammar 分层更清楚，因此应把每个断言放在直接拥有该行为的层级。
+结论是：fixture/golden 的价值在于记录真实故障，不在于把 CSS 语法表完整镜像一遍。yak 的 provider 与 grammar 分层更清楚，因此应把每个断言放在直接拥有该行为的层级。
 
 ## 新用户问题的收录流程
 

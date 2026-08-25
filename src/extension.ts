@@ -17,29 +17,29 @@ import {
 } from 'vscode-css-languageservice'
 import { TextDocument } from 'vscode-languageserver-textdocument'
 import {
-  getNextYakCssHover,
+  getMappedCssHover,
   type VirtualCssDocument,
-} from './nextYakHover'
+} from './hover'
 import {
-  getNextYakCssDiagnostics,
-  type NextYakCssDiagnostic,
-} from './nextYakDiagnostics'
-import { mapVirtualCssCodeAction } from './nextYakCodeActions'
+  getMappedCssDiagnostics,
+  type MappedCssDiagnostic,
+} from './diagnostics'
+import { mapVirtualCssCodeAction } from './codeActions'
 import {
-  getNextYakCssColorPresentations,
-  getNextYakCssColors,
-  type NextYakCssColorPresentation,
-} from './nextYakColors'
+  getMappedCssColorPresentations,
+  getMappedCssColors,
+  type MappedCssColorPresentation,
+} from './colors'
 import {
   createVirtualCssText,
   getAtRuleCompletionContext,
   getSelectorCompletionContext,
   mapVirtualRangeToSourceOffsets,
   type AtRuleCompletionContext,
-  NextYakTemplateCache,
-  type NextYakTemplate,
+  TemplateCache,
+  type Template,
   type SelectorCompletionContext,
-} from './nextYakTemplate'
+} from './template'
 
 const cssLanguageService = getCSSLanguageService()
 const cssPropertyNames = new Set(
@@ -76,26 +76,26 @@ const nestedAtRuleNames = new Set([
 const descriptorFallbackPropertyNames = new Map<string, ReadonlySet<string>>([
   ['@font-face', new Set(['font-family'])],
 ])
-const nextYakDocumentSelector: vscode.DocumentSelector = [
+const supportedDocumentSelector: vscode.DocumentSelector = [
   { language: 'javascript' },
   { language: 'javascriptreact' },
   { language: 'typescript' },
   { language: 'typescriptreact' },
 ]
-const nextYakLanguageIds = new Set(['javascript', 'javascriptreact', 'typescript', 'typescriptreact'])
+const supportedLanguageIds = new Set(['javascript', 'javascriptreact', 'typescript', 'typescriptreact'])
 const cssCompletionTriggerCharacters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ:-@'.split('')
-const nextYakCssDiagnosticSource = 'next-yak CSS'
-const nextYakCssValidateConfiguration = 'nextYak.css.validate'
+const cssDiagnosticSource = 'yak CSS'
+const cssValidateConfiguration = 'yak.css.validate'
 type CssCompletionService = Pick<CssLanguageService, 'doComplete' | 'parseStylesheet'>
 
 export function activate(context: vscode.ExtensionContext) {
-  const templateCache = new NextYakTemplateCache()
-  const completionProvider = new NextYakCssCompletionProvider(templateCache)
-  const hoverProvider = new NextYakCssHoverProvider(templateCache)
-  const diagnostics = vscode.languages.createDiagnosticCollection('next-yak CSS')
-  const diagnosticProvider = new NextYakCssDiagnosticProvider(templateCache, diagnostics)
-  const codeActionProvider = new NextYakCssCodeActionProvider(templateCache)
-  const colorProvider = new NextYakCssColorProvider(templateCache)
+  const templateCache = new TemplateCache()
+  const completionProvider = new CssCompletionProvider(templateCache)
+  const hoverProvider = new CssHoverProvider(templateCache)
+  const diagnostics = vscode.languages.createDiagnosticCollection('yak CSS')
+  const diagnosticProvider = new CssDiagnosticProvider(templateCache, diagnostics)
+  const codeActionProvider = new CssCodeActionProvider(templateCache)
+  const colorProvider = new CssColorProvider(templateCache)
 
   const updateDiagnostics = (document: vscode.TextDocument) => {
     diagnosticProvider.updateDocument(document)
@@ -121,30 +121,30 @@ export function activate(context: vscode.ExtensionContext) {
       updateDiagnostics(document)
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration(nextYakCssValidateConfiguration)) {
+      if (event.affectsConfiguration(cssValidateConfiguration)) {
         refreshDiagnostics()
       }
     }),
     vscode.languages.registerCompletionItemProvider(
-      nextYakDocumentSelector,
+      supportedDocumentSelector,
       completionProvider,
       ...cssCompletionTriggerCharacters,
     ),
-    vscode.languages.registerHoverProvider(nextYakDocumentSelector, hoverProvider),
+    vscode.languages.registerHoverProvider(supportedDocumentSelector, hoverProvider),
     vscode.languages.registerCodeActionsProvider(
-      nextYakDocumentSelector,
+      supportedDocumentSelector,
       codeActionProvider,
       { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] },
     ),
-    vscode.languages.registerColorProvider(nextYakDocumentSelector, colorProvider),
+    vscode.languages.registerColorProvider(supportedDocumentSelector, colorProvider),
   )
 
   refreshDiagnostics()
 }
 
-export class NextYakCssCompletionProvider implements vscode.CompletionItemProvider {
+export class CssCompletionProvider implements vscode.CompletionItemProvider {
   constructor(
-    private readonly templateCache = new NextYakTemplateCache(),
+    private readonly templateCache = new TemplateCache(),
     private readonly cssCompletionService: CssCompletionService = cssLanguageService,
   ) {}
 
@@ -216,8 +216,8 @@ export class NextYakCssCompletionProvider implements vscode.CompletionItemProvid
   }
 }
 
-export class NextYakCssHoverProvider implements vscode.HoverProvider {
-  constructor(private readonly templateCache = new NextYakTemplateCache()) {}
+export class CssHoverProvider implements vscode.HoverProvider {
+  constructor(private readonly templateCache = new TemplateCache()) {}
 
   provideHover(
     document: vscode.TextDocument,
@@ -242,7 +242,7 @@ export class NextYakCssHoverProvider implements vscode.HoverProvider {
       return undefined
     }
 
-    const hover = getNextYakCssHover(
+    const hover = getMappedCssHover(
       cssLanguageService,
       cursorOffset,
       template,
@@ -260,14 +260,14 @@ export class NextYakCssHoverProvider implements vscode.HoverProvider {
   }
 }
 
-export class NextYakCssDiagnosticProvider {
+export class CssDiagnosticProvider {
   constructor(
-    private readonly templateCache: NextYakTemplateCache,
+    private readonly templateCache: TemplateCache,
     private readonly diagnostics: vscode.DiagnosticCollection,
   ) {}
 
   updateDocument(document: vscode.TextDocument): void {
-    if (!isNextYakDocument(document) || !isCssValidationEnabled(document.uri)) {
+    if (!isSupportedDocument(document) || !isCssValidationEnabled(document.uri)) {
       this.diagnostics.delete(document.uri)
       return
     }
@@ -283,7 +283,7 @@ export class NextYakCssDiagnosticProvider {
     const mappedDiagnostics = templates.flatMap((template) => {
       const virtualCss = createVirtualCssDocument(document, template)
 
-      return getNextYakCssDiagnostics(cssLanguageService, template, virtualCss)
+      return getMappedCssDiagnostics(cssLanguageService, template, virtualCss)
     })
 
     if (mappedDiagnostics.length === 0) {
@@ -298,8 +298,8 @@ export class NextYakCssDiagnosticProvider {
   }
 }
 
-export class NextYakCssCodeActionProvider implements vscode.CodeActionProvider {
-  constructor(private readonly templateCache = new NextYakTemplateCache()) {}
+export class CssCodeActionProvider implements vscode.CodeActionProvider {
+  constructor(private readonly templateCache = new TemplateCache()) {}
 
   provideCodeActions(
     document: vscode.TextDocument,
@@ -327,7 +327,7 @@ export class NextYakCssCodeActionProvider implements vscode.CodeActionProvider {
       }
 
       const virtualCss = createVirtualCssDocument(document, template)
-      const mappedDiagnostics = getNextYakCssDiagnostics(cssLanguageService, template, virtualCss)
+      const mappedDiagnostics = getMappedCssDiagnostics(cssLanguageService, template, virtualCss)
       const diagnostics = getMatchingDiagnostics(document, mappedDiagnostics, context.diagnostics)
 
       if (diagnostics.length === 0) {
@@ -379,23 +379,23 @@ export class NextYakCssCodeActionProvider implements vscode.CodeActionProvider {
   }
 }
 
-export class NextYakCssColorProvider implements vscode.DocumentColorProvider {
-  constructor(private readonly templateCache = new NextYakTemplateCache()) {}
+export class CssColorProvider implements vscode.DocumentColorProvider {
+  constructor(private readonly templateCache = new TemplateCache()) {}
 
   provideDocumentColors(
     document: vscode.TextDocument,
     token: vscode.CancellationToken,
   ): vscode.ColorInformation[] | undefined {
-    if (token.isCancellationRequested || !isNextYakDocument(document)) {
+    if (token.isCancellationRequested || !isSupportedDocument(document)) {
       return undefined
     }
 
     const colors: vscode.ColorInformation[] = []
 
-    for (const template of getNextYakTemplates(document, this.templateCache)) {
+    for (const template of getDocumentTemplates(document, this.templateCache)) {
       const virtualCss = createVirtualCssDocument(document, template)
 
-      for (const color of getNextYakCssColors(cssLanguageService, template, virtualCss)) {
+      for (const color of getMappedCssColors(cssLanguageService, template, virtualCss)) {
         if (token.isCancellationRequested) {
           return undefined
         }
@@ -415,26 +415,26 @@ export class NextYakCssColorProvider implements vscode.DocumentColorProvider {
     context: { document: vscode.TextDocument; range: vscode.Range },
     token: vscode.CancellationToken,
   ): vscode.ColorPresentation[] | undefined {
-    if (token.isCancellationRequested || !isNextYakDocument(context.document)) {
+    if (token.isCancellationRequested || !isSupportedDocument(context.document)) {
       return undefined
     }
 
     const sourceRange = toOffsetRange(context.document, context.range)
 
-    for (const template of getNextYakTemplates(context.document, this.templateCache)) {
+    for (const template of getDocumentTemplates(context.document, this.templateCache)) {
       if (!isRangeInsideTemplate(context.range, context.document, template)) {
         continue
       }
 
       const virtualCss = createVirtualCssDocument(context.document, template)
-      const isKnownColorRange = getNextYakCssColors(cssLanguageService, template, virtualCss)
+      const isKnownColorRange = getMappedCssColors(cssLanguageService, template, virtualCss)
         .some((knownColor) => isSameOffsetRange(knownColor.range, sourceRange))
 
       if (!isKnownColorRange) {
         continue
       }
 
-      const presentations = getNextYakCssColorPresentations(
+      const presentations = getMappedCssColorPresentations(
         cssLanguageService,
         toCssColor(color),
         sourceRange,
@@ -449,15 +449,15 @@ export class NextYakCssColorProvider implements vscode.DocumentColorProvider {
   }
 }
 
-function isNextYakDocument(document: vscode.TextDocument) {
-  return nextYakLanguageIds.has(document.languageId)
+function isSupportedDocument(document: vscode.TextDocument) {
+  return supportedLanguageIds.has(document.languageId)
 }
 
-function getNextYakTemplates(document: vscode.TextDocument, templateCache: NextYakTemplateCache) {
-  return templateCache.findTemplates(getNextYakTemplateDocument(document))
+function getDocumentTemplates(document: vscode.TextDocument, templateCache: TemplateCache) {
+  return templateCache.findTemplates(getTemplateDocument(document))
 }
 
-function getNextYakTemplateDocument(document: vscode.TextDocument) {
+function getTemplateDocument(document: vscode.TextDocument) {
   return {
     fileName: document.fileName,
     languageId: document.languageId,
@@ -497,7 +497,7 @@ function toCssColor(color: vscode.Color): CssColor {
 
 function toVscodeColorPresentation(
   document: vscode.TextDocument,
-  presentation: NextYakCssColorPresentation,
+  presentation: MappedCssColorPresentation,
 ) {
   const colorPresentation = new vscode.ColorPresentation(presentation.label)
 
@@ -513,10 +513,10 @@ function toVscodeColorPresentation(
 }
 
 function isCssValidationEnabled(resource: vscode.Uri) {
-  return vscode.workspace.getConfiguration('nextYak', resource).get<boolean>('css.validate', true)
+  return vscode.workspace.getConfiguration('yak', resource).get<boolean>('css.validate', true)
 }
 
-function toDiagnostic(document: vscode.TextDocument, mappedDiagnostic: NextYakCssDiagnostic): vscode.Diagnostic {
+function toDiagnostic(document: vscode.TextDocument, mappedDiagnostic: MappedCssDiagnostic): vscode.Diagnostic {
   const diagnostic = new vscode.Diagnostic(
     new vscode.Range(
       document.positionAt(mappedDiagnostic.range.start),
@@ -527,7 +527,7 @@ function toDiagnostic(document: vscode.TextDocument, mappedDiagnostic: NextYakCs
   )
 
   diagnostic.code = mappedDiagnostic.diagnostic.code
-  diagnostic.source = nextYakCssDiagnosticSource
+  diagnostic.source = cssDiagnosticSource
 
   return diagnostic
 }
@@ -549,7 +549,7 @@ function toDiagnosticSeverity(diagnostic: CssDiagnostic) {
 
 function getMatchingDiagnostics(
   document: vscode.TextDocument,
-  mappedDiagnostics: readonly NextYakCssDiagnostic[],
+  mappedDiagnostics: readonly MappedCssDiagnostic[],
   diagnostics: readonly vscode.Diagnostic[],
 ) {
   return mappedDiagnostics.flatMap((mappedDiagnostic) => {
@@ -558,7 +558,7 @@ function getMatchingDiagnostics(
       document.positionAt(mappedDiagnostic.range.end),
     )
     const matchingDiagnostic = diagnostics.find((diagnostic) => (
-      diagnostic.source === nextYakCssDiagnosticSource
+      diagnostic.source === cssDiagnosticSource
       && diagnostic.code === mappedDiagnostic.diagnostic.code
       && diagnostic.message === mappedDiagnostic.diagnostic.message
       && diagnostic.range.isEqual(sourceRange)
@@ -592,7 +592,7 @@ function isSameCssDiagnostic(left: CssDiagnostic, right: CssDiagnostic) {
     && left.range.end.character === right.range.end.character
 }
 
-function getVirtualTemplateRange(template: NextYakTemplate, virtualCss: VirtualCssDocument): CssRange {
+function getVirtualTemplateRange(template: Template, virtualCss: VirtualCssDocument): CssRange {
   const start = virtualCss.prefixLength
   const end = start + template.maskedBody.length
 
@@ -605,7 +605,7 @@ function getVirtualTemplateRange(template: NextYakTemplate, virtualCss: VirtualC
 function isRangeInsideTemplate(
   range: vscode.Range,
   document: vscode.TextDocument,
-  template: NextYakTemplate,
+  template: Template,
 ) {
   const start = document.offsetAt(range.start)
   const end = document.offsetAt(range.end)
@@ -619,13 +619,13 @@ function toCodeActionKind(kind: string | undefined) {
 
 function createVirtualCssDocument(
   document: vscode.TextDocument,
-  template: NextYakTemplate,
+  template: Template,
 ): VirtualCssDocument {
   const virtualCssText = createVirtualCssText(template)
 
   return {
     document: TextDocument.create(
-      `next-yak:${document.uri.toString()}?start=${template.bodyStart}`,
+      `yak:${document.uri.toString()}?start=${template.bodyStart}`,
       'css',
       document.version,
       virtualCssText.text,
@@ -641,7 +641,7 @@ function getSelectorCompletionItems(
   source: string,
   cursorOffset: number,
   document: vscode.TextDocument,
-  template: NextYakTemplate,
+  template: Template,
   existingLabels: ReadonlySet<string>,
 ) {
   const selectorContext = getSelectorCompletionContext(source, cursorOffset, template)
@@ -817,7 +817,7 @@ function createSelectorDocument(
 ): VirtualCssDocument {
   return {
     document: TextDocument.create(
-      `next-yak:${document.uri.toString()}?selector-start=${context.sourceStart}`,
+      `yak:${document.uri.toString()}?selector-start=${context.sourceStart}`,
       'css',
       document.version,
       context.text,

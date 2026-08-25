@@ -1,18 +1,18 @@
 import * as ts from 'typescript'
 
-export type NextYakTag = 'styled' | 'css' | 'globalStyle' | 'keyframes'
+export type TemplateTag = 'styled' | 'css' | 'globalStyle' | 'keyframes'
 
 export interface OffsetRange {
   start: number
   end: number
 }
 
-export interface NextYakTemplate {
+export interface Template {
   bodyEnd: number
   bodyStart: number
   interpolations: readonly OffsetRange[]
   maskedBody: string
-  tag: NextYakTag
+  tag: TemplateTag
 }
 
 export interface VirtualCssText {
@@ -52,7 +52,7 @@ export type AtRuleCompletionContext =
       kind: 'descriptor-value'
     }
 
-export interface NextYakTemplateDocument {
+export interface TemplateDocument {
   fileName: string
   languageId: string
   source: string
@@ -60,12 +60,12 @@ export interface NextYakTemplateDocument {
   version: number
 }
 
-interface NamedNextYakBinding {
+interface NamedTemplateBinding {
   kind: 'named'
-  tag: NextYakTag
+  tag: TemplateTag
 }
 
-interface NamespaceNextYakBinding {
+interface NamespaceTemplateBinding {
   kind: 'namespace'
 }
 
@@ -75,20 +75,20 @@ interface TagPath {
   root: ts.Identifier
 }
 
-interface CachedNextYakTemplateAnalysis {
+interface CachedTemplateAnalysis {
   fileName: string
   languageId: string
   sourceFile: ts.SourceFile
-  taggedTemplates: readonly TaggedNextYakTemplate[]
+  taggedTemplates: readonly TaggedTemplate[]
   version: number
 }
 
-interface TaggedNextYakTemplate {
+interface TaggedTemplate {
   node: ts.TaggedTemplateExpression
-  tag: NextYakTag
+  tag: TemplateTag
 }
 
-type NextYakBinding = NamedNextYakBinding | NamespaceNextYakBinding
+type TemplateBinding = NamedTemplateBinding | NamespaceTemplateBinding
 type CssBlockKind = 'descriptor' | 'group' | 'keyframes' | 'rule'
 
 interface CssBlock {
@@ -96,7 +96,7 @@ interface CssBlock {
   kind: CssBlockKind
 }
 
-const nextYakTagNames = new Set<NextYakTag>(['styled', 'css', 'globalStyle', 'keyframes'])
+const supportedTagNames = new Set<TemplateTag>(['styled', 'css', 'globalStyle', 'keyframes'])
 const descriptorAtRuleNames = new Set([
   '@counter-style',
   '@font-face',
@@ -128,8 +128,8 @@ const regularExpressionPrefixKeywords = new Set([
   'yield',
 ])
 
-export class NextYakTemplateCache {
-  private readonly analyses = new Map<string, CachedNextYakTemplateAnalysis>()
+export class TemplateCache {
+  private readonly analyses = new Map<string, CachedTemplateAnalysis>()
 
   get size(): number {
     return this.analyses.size
@@ -139,17 +139,17 @@ export class NextYakTemplateCache {
     this.analyses.clear()
   }
 
-  findTemplate(document: NextYakTemplateDocument, cursorOffset: number): NextYakTemplate | undefined {
+  findTemplate(document: TemplateDocument, cursorOffset: number): Template | undefined {
     if (cursorOffset < 0 || cursorOffset > document.source.length) {
       return undefined
     }
 
     const analysis = this.getAnalysis(document)
 
-    return analysis ? findNextYakTemplateInAnalysis(document.source, cursorOffset, analysis) : undefined
+    return analysis ? findTemplateInAnalysis(document.source, cursorOffset, analysis) : undefined
   }
 
-  findTemplates(document: NextYakTemplateDocument): readonly NextYakTemplate[] {
+  findTemplates(document: TemplateDocument): readonly Template[] {
     const analysis = this.getAnalysis(document)
 
     if (!analysis) {
@@ -172,14 +172,14 @@ export class NextYakTemplateCache {
     this.analyses.delete(uri)
   }
 
-  private getAnalysis(document: NextYakTemplateDocument): CachedNextYakTemplateAnalysis | undefined {
+  private getAnalysis(document: TemplateDocument): CachedTemplateAnalysis | undefined {
     const cachedAnalysis = this.analyses.get(document.uri)
 
     if (cachedAnalysis && matchesDocument(cachedAnalysis, document)) {
       return cachedAnalysis
     }
 
-    const analysis = tryCreateNextYakTemplateAnalysis(
+    const analysis = tryCreateTemplateAnalysis(
       document.source,
       document.languageId,
       document.fileName,
@@ -196,24 +196,24 @@ export class NextYakTemplateCache {
   }
 }
 
-export function findNextYakTemplate(
+export function findTemplate(
   source: string,
   cursorOffset: number,
   languageId: string,
   fileName: string,
-): NextYakTemplate | undefined {
+): Template | undefined {
   if (cursorOffset < 0 || cursorOffset > source.length) {
     return undefined
   }
 
-  const analysis = tryCreateNextYakTemplateAnalysis(source, languageId, fileName, 0)
+  const analysis = tryCreateTemplateAnalysis(source, languageId, fileName, 0)
 
-  return analysis ? findNextYakTemplateInAnalysis(source, cursorOffset, analysis) : undefined
+  return analysis ? findTemplateInAnalysis(source, cursorOffset, analysis) : undefined
 }
 
 function matchesDocument(
-  analysis: CachedNextYakTemplateAnalysis,
-  document: NextYakTemplateDocument,
+  analysis: CachedTemplateAnalysis,
+  document: TemplateDocument,
 ) {
   return analysis.version === document.version
     && analysis.languageId === document.languageId
@@ -221,21 +221,21 @@ function matchesDocument(
     && analysis.sourceFile.text === document.source
 }
 
-function createNextYakTemplateAnalysis(
+function createTemplateAnalysis(
   source: string,
   languageId: string,
   fileName: string,
   version: number,
-): CachedNextYakTemplateAnalysis {
+): CachedTemplateAnalysis {
   const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, toScriptKind(languageId))
   const checker = createTypeChecker(sourceFile, fileName)
-  const bindings = collectNextYakBindings(sourceFile, checker)
-  const taggedTemplates: TaggedNextYakTemplate[] = []
+  const bindings = collectTemplateBindings(sourceFile, checker)
+  const taggedTemplates: TaggedTemplate[] = []
 
   if (bindings.size > 0) {
     const visit = (node: ts.Node) => {
       if (ts.isTaggedTemplateExpression(node)) {
-        const tag = getNextYakTag(node.tag, checker, bindings)
+        const tag = getTemplateTag(node.tag, checker, bindings)
 
         if (tag) {
           taggedTemplates.push({ node, tag })
@@ -257,25 +257,25 @@ function createNextYakTemplateAnalysis(
   }
 }
 
-function tryCreateNextYakTemplateAnalysis(
+function tryCreateTemplateAnalysis(
   source: string,
   languageId: string,
   fileName: string,
   version: number,
-): CachedNextYakTemplateAnalysis | undefined {
+): CachedTemplateAnalysis | undefined {
   try {
-    return createNextYakTemplateAnalysis(source, languageId, fileName, version)
+    return createTemplateAnalysis(source, languageId, fileName, version)
   } catch {
     return undefined
   }
 }
 
-function findNextYakTemplateInAnalysis(
+function findTemplateInAnalysis(
   source: string,
   cursorOffset: number,
-  analysis: CachedNextYakTemplateAnalysis,
-): NextYakTemplate | undefined {
-  let closestTemplate: NextYakTemplate | undefined
+  analysis: CachedTemplateAnalysis,
+): Template | undefined {
+  let closestTemplate: Template | undefined
 
   for (const taggedTemplate of analysis.taggedTemplates) {
     const template = createTemplate(source, analysis.sourceFile, taggedTemplate.node, taggedTemplate.tag, cursorOffset)
@@ -345,8 +345,8 @@ export function maskInterpolations(templateBody: string, interpolations: readonl
   return maskedBody + templateBody.slice(offset)
 }
 
-export function createVirtualCssText(template: NextYakTemplate): VirtualCssText {
-  const prefix = template.tag === 'keyframes' ? '@keyframes next_yak_completion {\n' : ':root {\n'
+export function createVirtualCssText(template: Template): VirtualCssText {
+  const prefix = template.tag === 'keyframes' ? '@keyframes template_completion {\n' : ':root {\n'
 
   return {
     text: `${prefix}${template.maskedBody}\n}`,
@@ -377,7 +377,7 @@ export function mapVirtualRangeToSourceOffsets(
 export function getSelectorCompletionContext(
   source: string,
   cursorOffset: number,
-  template: NextYakTemplate,
+  template: Template,
 ): SelectorCompletionContext | undefined {
   const lineStart = source.lastIndexOf('\n', cursorOffset - 1) + 1
   let sourceStart = Math.max(lineStart, template.bodyStart)
@@ -397,7 +397,7 @@ export function getSelectorCompletionContext(
 export function getAtRuleCompletionContext(
   source: string,
   cursorOffset: number,
-  template: NextYakTemplate,
+  template: Template,
 ): AtRuleCompletionContext | undefined {
   const cursorInBody = cursorOffset - template.bodyStart
 
@@ -552,9 +552,9 @@ function createTemplate(
   source: string,
   sourceFile: ts.SourceFile,
   taggedTemplate: ts.TaggedTemplateExpression,
-  tag: NextYakTag,
+  tag: TemplateTag,
   cursorOffset?: number,
-): NextYakTemplate | undefined {
+): Template | undefined {
   const templateStart = taggedTemplate.template.getStart(sourceFile)
   const bodyStart = templateStart + 1
   const hasClosingBacktick = source[taggedTemplate.template.end - 1] === '`'
@@ -594,11 +594,11 @@ function createTemplate(
   }
 }
 
-function collectNextYakBindings(sourceFile: ts.SourceFile, checker: ts.TypeChecker) {
-  const bindings = new Map<ts.Symbol, NextYakBinding>()
+function collectTemplateBindings(sourceFile: ts.SourceFile, checker: ts.TypeChecker) {
+  const bindings = new Map<ts.Symbol, TemplateBinding>()
 
   for (const statement of sourceFile.statements) {
-    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || statement.moduleSpecifier.text !== 'next-yak') {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || statement.moduleSpecifier.text !== 'yak') {
       continue
     }
 
@@ -631,7 +631,7 @@ function collectNextYakBindings(sourceFile: ts.SourceFile, checker: ts.TypeCheck
 
       const importedName = element.propertyName?.text ?? element.name.text
 
-      if (!isNextYakTag(importedName)) {
+      if (!isSupportedTag(importedName)) {
         continue
       }
 
@@ -646,11 +646,11 @@ function collectNextYakBindings(sourceFile: ts.SourceFile, checker: ts.TypeCheck
   return bindings
 }
 
-function getNextYakTag(
+function getTemplateTag(
   expression: ts.Expression,
   checker: ts.TypeChecker,
-  bindings: ReadonlyMap<ts.Symbol, NextYakBinding>,
-): NextYakTag | undefined {
+  bindings: ReadonlyMap<ts.Symbol, TemplateBinding>,
+): TemplateTag | undefined {
   const tagPath = getTagPath(expression)
 
   if (!tagPath) {
@@ -665,23 +665,23 @@ function getNextYakTag(
   }
 
   if (binding.kind === 'named') {
-    return getNextYakTagFromPath(binding.tag, tagPath.properties, tagPath.hasCall)
+    return getTemplateTagFromPath(binding.tag, tagPath.properties, tagPath.hasCall)
   }
 
   const [tagName, ...remainingProperties] = tagPath.properties
 
-  if (!isNextYakTag(tagName)) {
+  if (!isSupportedTag(tagName)) {
     return undefined
   }
 
-  return getNextYakTagFromPath(tagName, remainingProperties, tagPath.hasCall)
+  return getTemplateTagFromPath(tagName, remainingProperties, tagPath.hasCall)
 }
 
-function getNextYakTagFromPath(
-  tag: NextYakTag,
+function getTemplateTagFromPath(
+  tag: TemplateTag,
   properties: readonly string[],
   hasCall: boolean,
-): NextYakTag | undefined {
+): TemplateTag | undefined {
   if (tag === 'styled') {
     return properties.length > 0 || hasCall ? 'styled' : undefined
   }
@@ -739,8 +739,8 @@ function getTagPath(node: ts.Node): TagPath | undefined {
   return undefined
 }
 
-function isNextYakTag(value: string): value is NextYakTag {
-  return nextYakTagNames.has(value as NextYakTag)
+function isSupportedTag(value: string): value is TemplateTag {
+  return supportedTagNames.has(value as TemplateTag)
 }
 
 function toScriptKind(languageId: string) {

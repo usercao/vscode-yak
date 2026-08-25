@@ -7,28 +7,28 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument'
 import { describe, expect, it } from 'vitest'
 import {
-  getNextYakCssColorPresentations,
-  getNextYakCssColors,
+  getMappedCssColorPresentations,
+  getMappedCssColors,
   mapVirtualCssColorPresentation,
-} from '../src/nextYakColors'
-import type { VirtualCssDocument } from '../src/nextYakHover'
-import { createVirtualCssText, findNextYakTemplate, type NextYakTemplate } from '../src/nextYakTemplate'
+} from '../src/colors'
+import type { VirtualCssDocument } from '../src/hover'
+import { createVirtualCssText, findTemplate, type Template } from '../src/template'
 
 const cssLanguageService = getCSSLanguageService()
 
-function createVirtualDocument(template: NextYakTemplate): VirtualCssDocument {
+function createVirtualDocument(template: Template): VirtualCssDocument {
   const virtualCssText = createVirtualCssText(template)
 
   return {
-    document: TextDocument.create('next-yak:test', 'css', 1, virtualCssText.text),
+    document: TextDocument.create('yak:test', 'css', 1, virtualCssText.text),
     prefixLength: virtualCssText.prefixLength,
     sourceLength: template.maskedBody.length,
     sourceStart: template.bodyStart,
   }
 }
 
-function getTemplate(source: string, needle: string): NextYakTemplate {
-  const template = findNextYakTemplate(source, source.indexOf(needle), 'typescriptreact', '/fixture.tsx')
+function getTemplate(source: string, needle: string): Template {
+  const template = findTemplate(source, source.indexOf(needle), 'typescriptreact', '/fixture.tsx')
 
   if (!template) {
     throw new Error(`Expected a template at ${needle}`)
@@ -39,7 +39,7 @@ function getTemplate(source: string, needle: string): NextYakTemplate {
 
 function styledSource(css: string): string {
   return [
-    "import { styled } from 'next-yak'",
+    "import { styled } from 'yak'",
     'const Panel = styled.div`',
     `  ${css}`,
     '`',
@@ -60,7 +60,7 @@ function colorInformation(
   }
 }
 
-describe('next-yak CSS colors', () => {
+describe('yak CSS colors', () => {
   it('maps static hex, alpha, named, and gradient colors while excluding interpolations, comments, and strings', () => {
     const source = styledSource([
       'color: #176b5b;',
@@ -72,7 +72,7 @@ describe('next-yak CSS colors', () => {
       '  color: ${theme.accent};',
     ].join('\n  '))
     const template = getTemplate(source, '#176b5b')
-    const colors = getNextYakCssColors(cssLanguageService, template, createVirtualDocument(template))
+    const colors = getMappedCssColors(cssLanguageService, template, createVirtualDocument(template))
 
     expect(colors.map((color) => source.slice(color.range.start, color.range.end))).toEqual([
       '#176b5b',
@@ -88,8 +88,8 @@ describe('next-yak CSS colors', () => {
     const source = styledSource('color: rebeccapurple;')
     const template = getTemplate(source, 'rebeccapurple')
     const virtualCss = createVirtualDocument(template)
-    const namedColor = getNextYakCssColors(cssLanguageService, template, virtualCss)[0]
-    const presentations = getNextYakCssColorPresentations(
+    const namedColor = getMappedCssColors(cssLanguageService, template, virtualCss)[0]
+    const presentations = getMappedCssColorPresentations(
       cssLanguageService,
       namedColor.color,
       namedColor.range,
@@ -112,8 +112,8 @@ describe('next-yak CSS colors', () => {
     const source = styledSource('color: rgba(102, 51, 153, 0.5);')
     const template = getTemplate(source, 'rgba')
     const virtualCss = createVirtualDocument(template)
-    const alphaColor = getNextYakCssColors(cssLanguageService, template, virtualCss)[0]
-    const presentations = getNextYakCssColorPresentations(
+    const alphaColor = getMappedCssColors(cssLanguageService, template, virtualCss)[0]
+    const presentations = getMappedCssColorPresentations(
       cssLanguageService,
       alphaColor.color,
       alphaColor.range,
@@ -128,8 +128,8 @@ describe('next-yak CSS colors', () => {
     const source = styledSource('color: rgb(102.1, 51, 153);')
     const template = getTemplate(source, 'rgb')
     const virtualCss = createVirtualDocument(template)
-    const color = getNextYakCssColors(cssLanguageService, template, virtualCss)[0]
-    const presentations = getNextYakCssColorPresentations(
+    const color = getMappedCssColors(cssLanguageService, template, virtualCss)[0]
+    const presentations = getMappedCssColorPresentations(
       cssLanguageService,
       color.color,
       color.range,
@@ -168,7 +168,7 @@ describe('next-yak CSS colors', () => {
       ],
       parseStylesheet: () => ({}),
     }
-    const colors = getNextYakCssColors(service, template, virtualCss)
+    const colors = getMappedCssColors(service, template, virtualCss)
     const unsafePresentation: CssColorPresentation = {
       label: 'unsafe',
       textEdit: {

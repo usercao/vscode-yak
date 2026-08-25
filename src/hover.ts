@@ -10,9 +10,9 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument'
 import {
   mapVirtualRangeToSourceOffsets,
-  type NextYakTemplate,
+  type Template,
   type OffsetRange,
-} from './nextYakTemplate'
+} from './template'
 
 export interface VirtualCssDocument {
   document: TextDocument
@@ -21,7 +21,7 @@ export interface VirtualCssDocument {
   sourceStart: number
 }
 
-export interface NextYakCssHover {
+export interface MappedCssHover {
   contents: CssHover['contents']
   range: OffsetRange
 }
@@ -36,12 +36,12 @@ const cssProperties = new Map(cssDataProvider.provideProperties().map((property)
 const cssPseudoClasses = new Map(cssDataProvider.providePseudoClasses().map((pseudoClass) => [pseudoClass.name, pseudoClass]))
 const cssPseudoElements = new Map(cssDataProvider.providePseudoElements().map((pseudoElement) => [pseudoElement.name, pseudoElement]))
 
-export function getNextYakCssHover(
+export function getMappedCssHover(
   cssLanguageService: LanguageService,
   cursorOffset: number,
-  template: NextYakTemplate,
+  template: Template,
   virtualCss: VirtualCssDocument,
-): NextYakCssHover | undefined {
+): MappedCssHover | undefined {
   const cursorInBody = cursorOffset - template.bodyStart
   const virtualOffset = virtualCss.prefixLength + cursorInBody
 
@@ -77,10 +77,10 @@ export function getNextYakCssHover(
 }
 
 function getPseudoHover(
-  template: NextYakTemplate,
+  template: Template,
   cursorInBody: number,
   cssHover: CssHover | null,
-): NextYakCssHover | undefined {
+): MappedCssHover | undefined {
   if (!isSelectorHover(cssHover)) {
     return undefined
   }
@@ -109,7 +109,7 @@ function getPseudoHover(
   }
 }
 
-function getValueHover(template: NextYakTemplate, cursorInBody: number): NextYakCssHover | undefined {
+function getValueHover(template: Template, cursorInBody: number): MappedCssHover | undefined {
   const property = getDeclarationProperty(template.maskedBody, cursorInBody)
 
   if (!property) {

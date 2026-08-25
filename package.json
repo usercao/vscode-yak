@@ -1,26 +1,26 @@
 {
-  "name": "next-yak-vscode",
-  "displayName": "next-yak",
+  "name": "vscode-yak",
+  "displayName": "vscode-yak",
   "version": "0.1.0",
-  "description": "CSS syntax highlighting and completion for next-yak tagged templates.",
+  "description": "CSS syntax highlighting and completion for yak tagged templates.",
   "categories": [
     "Programming Languages"
   ],
   "keywords": [
     "css-in-js",
-    "next-yak",
+    "yak",
     "syntax-highlighting"
   ],
   "license": "MIT",
   "publisher": "local",
   "repository": {
     "type": "git",
-    "url": "https://github.com/usercao/next-yak-vscode.git"
+    "url": "https://github.com/usercao/vscode-yak.git"
   },
   "bugs": {
-    "url": "https://github.com/usercao/next-yak-vscode/issues"
+    "url": "https://github.com/usercao/vscode-yak/issues"
   },
-  "homepage": "https://github.com/usercao/next-yak-vscode#readme",
+  "homepage": "https://github.com/usercao/vscode-yak#readme",
   "type": "module",
   "main": "./dist/extension.cjs",
   "scripts": {
@@ -31,7 +31,7 @@
     "test:integration": "yarn build && yarn test:integration:build && node ./.vscode-test/compiled/runExtensionTests.cjs",
     "verify": "yarn check && yarn test && yarn test:integration && yarn package",
     "vscode:prepublish": "yarn build",
-    "package": "yarn vsce package --no-yarn --no-dependencies --out ./next-yak-vscode-${npm_package_version}.vsix"
+    "package": "yarn vsce package --no-yarn --no-dependencies --out ./vscode-yak-${npm_package_version}.vsix"
   },
   "dependencies": {
     "color-name": "^2.1.1",
@@ -52,20 +52,20 @@
   },
   "contributes": {
     "configuration": {
-      "title": "next-yak",
+      "title": "yak",
       "properties": {
-        "nextYak.css.validate": {
+        "yak.css.validate": {
           "type": "boolean",
           "default": true,
           "scope": "resource",
-          "markdownDescription": "Enable CSS diagnostics inside statically recognized next-yak tagged templates. This does not affect CSS completion or hover."
+          "markdownDescription": "Enable CSS diagnostics inside statically recognized yak tagged templates. This does not affect CSS completion or hover."
         }
       }
     },
     "grammars": [
       {
-        "scopeName": "next-yak.injection",
-        "path": "./syntaxes/next-yak.injection.json",
+        "scopeName": "yak.injection",
+        "path": "./syntaxes/typescript.injection.json",
         "injectTo": [
           "source.ts",
           "source.tsx"
@@ -77,8 +77,8 @@
         }
       },
       {
-        "scopeName": "next-yak-js.injection",
-        "path": "./syntaxes/next-yak-js.injection.json",
+        "scopeName": "yak-js.injection",
+        "path": "./syntaxes/javascript.injection.json",
         "injectTo": [
           "source.js",
           "source.js.jsx"

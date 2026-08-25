@@ -6,28 +6,28 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument'
 import { describe, expect, it } from 'vitest'
 import {
-  getNextYakCssDiagnostics,
+  getMappedCssDiagnostics,
   mapTemplateRangeToVirtualCssRange,
-} from '../src/nextYakDiagnostics'
-import type { VirtualCssDocument } from '../src/nextYakHover'
-import { createVirtualCssText, findNextYakTemplate, type NextYakTemplate } from '../src/nextYakTemplate'
+} from '../src/diagnostics'
+import type { VirtualCssDocument } from '../src/hover'
+import { createVirtualCssText, findTemplate, type Template } from '../src/template'
 
 const cssLanguageService = getCSSLanguageService()
 
-function createVirtualDocument(template: NextYakTemplate): VirtualCssDocument {
+function createVirtualDocument(template: Template): VirtualCssDocument {
   const virtualCssText = createVirtualCssText(template)
 
   return {
-    document: TextDocument.create('next-yak:test', 'css', 1, virtualCssText.text),
+    document: TextDocument.create('yak:test', 'css', 1, virtualCssText.text),
     prefixLength: virtualCssText.prefixLength,
     sourceLength: template.maskedBody.length,
     sourceStart: template.bodyStart,
   }
 }
 
-function getTemplate(source: string, needle: string): NextYakTemplate {
+function getTemplate(source: string, needle: string): Template {
   const cursorOffset = source.indexOf(needle)
-  const template = findNextYakTemplate(source, cursorOffset, 'typescriptreact', '/fixture.tsx')
+  const template = findTemplate(source, cursorOffset, 'typescriptreact', '/fixture.tsx')
 
   if (!template) {
     throw new Error(`Expected a template at ${needle}`)
@@ -38,7 +38,7 @@ function getTemplate(source: string, needle: string): NextYakTemplate {
 
 function styledSource(css: string): string {
   return [
-    "import { styled } from 'next-yak'",
+    "import { styled } from 'yak'",
     'const Panel = styled.div`',
     `  ${css}`,
     '`',
@@ -63,11 +63,11 @@ function cssDiagnostic(
   }
 }
 
-describe('next-yak CSS diagnostics', () => {
+describe('yak CSS diagnostics', () => {
   it('maps CSS Language Service diagnostics from static template text back to the host document', () => {
     const source = styledSource('colro: red;')
     const template = getTemplate(source, 'colro')
-    const diagnostics = getNextYakCssDiagnostics(
+    const diagnostics = getMappedCssDiagnostics(
       cssLanguageService,
       template,
       createVirtualDocument(template),
@@ -81,7 +81,7 @@ describe('next-yak CSS diagnostics', () => {
   it('keeps diagnostics after an interpolation when their complete range is static', () => {
     const source = styledSource('color: ${theme.accent};\n  colro: red;')
     const template = getTemplate(source, 'colro')
-    const diagnostics = getNextYakCssDiagnostics(
+    const diagnostics = getMappedCssDiagnostics(
       cssLanguageService,
       template,
       createVirtualDocument(template),
@@ -94,7 +94,7 @@ describe('next-yak CSS diagnostics', () => {
   it('retains a static empty-value diagnostic that does not follow an interpolation', () => {
     const source = styledSource('color: ;')
     const template = getTemplate(source, 'color')
-    const diagnostics = getNextYakCssDiagnostics(
+    const diagnostics = getMappedCssDiagnostics(
       cssLanguageService,
       template,
       createVirtualDocument(template),
@@ -108,14 +108,14 @@ describe('next-yak CSS diagnostics', () => {
   it('maps missing-semicolon and unclosed-value diagnostics from static CSS', () => {
     const missingSemicolonSource = styledSource('color: red\n  background: blue;')
     const missingSemicolonTemplate = getTemplate(missingSemicolonSource, 'color')
-    const missingSemicolonDiagnostics = getNextYakCssDiagnostics(
+    const missingSemicolonDiagnostics = getMappedCssDiagnostics(
       cssLanguageService,
       missingSemicolonTemplate,
       createVirtualDocument(missingSemicolonTemplate),
     )
     const unclosedValueSource = styledSource('color: rgb(1, 2, 3;')
     const unclosedValueTemplate = getTemplate(unclosedValueSource, 'color')
-    const unclosedValueDiagnostics = getNextYakCssDiagnostics(
+    const unclosedValueDiagnostics = getMappedCssDiagnostics(
       cssLanguageService,
       unclosedValueTemplate,
       createVirtualDocument(unclosedValueTemplate),
@@ -134,19 +134,19 @@ describe('next-yak CSS diagnostics', () => {
     const nestedSource = styledSource('&:hover {\n    colro: red;\n  }')
     const nestedTemplate = getTemplate(nestedSource, 'colro')
     const keyframesSource = [
-      "import { keyframes } from 'next-yak'",
+      "import { keyframes } from 'yak'",
       'const fade = keyframes`',
       '  from { opacity: rgb(1, 2, 3; }',
       '`',
     ].join('\n')
     const keyframesTemplate = getTemplate(keyframesSource, 'opacity')
 
-    const nestedDiagnostics = getNextYakCssDiagnostics(
+    const nestedDiagnostics = getMappedCssDiagnostics(
       cssLanguageService,
       nestedTemplate,
       createVirtualDocument(nestedTemplate),
     )
-    const keyframesDiagnostics = getNextYakCssDiagnostics(
+    const keyframesDiagnostics = getMappedCssDiagnostics(
       cssLanguageService,
       keyframesTemplate,
       createVirtualDocument(keyframesTemplate),
@@ -187,7 +187,7 @@ describe('next-yak CSS diagnostics', () => {
       parseStylesheet: () => ({}),
     }
 
-    const mapped = getNextYakCssDiagnostics(service, template, virtualCss)
+    const mapped = getMappedCssDiagnostics(service, template, virtualCss)
 
     expect(mapped).toHaveLength(1)
     expect(mapped[0].diagnostic.message).toBe('static')

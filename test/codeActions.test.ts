@@ -1,21 +1,21 @@
 import type { CodeAction as CssCodeAction, Range as CssRange } from 'vscode-css-languageservice'
 import { TextDocument } from 'vscode-languageserver-textdocument'
 import { describe, expect, it } from 'vitest'
-import { mapVirtualCssCodeAction } from '../src/nextYakCodeActions'
-import type { VirtualCssDocument } from '../src/nextYakHover'
-import { createVirtualCssText, findNextYakTemplate, type NextYakTemplate } from '../src/nextYakTemplate'
+import { mapVirtualCssCodeAction } from '../src/codeActions'
+import type { VirtualCssDocument } from '../src/hover'
+import { createVirtualCssText, findTemplate, type Template } from '../src/template'
 
 function styledSource(css: string): string {
   return [
-    "import { styled } from 'next-yak'",
+    "import { styled } from 'yak'",
     'const Panel = styled.div`',
     `  ${css}`,
     '`',
   ].join('\n')
 }
 
-function createTemplate(source: string, needle: string): NextYakTemplate {
-  const template = findNextYakTemplate(source, source.indexOf(needle), 'typescriptreact', '/fixture.tsx')
+function createTemplate(source: string, needle: string): Template {
+  const template = findTemplate(source, source.indexOf(needle), 'typescriptreact', '/fixture.tsx')
 
   if (!template) {
     throw new Error(`Expected template at ${needle}`)
@@ -24,11 +24,11 @@ function createTemplate(source: string, needle: string): NextYakTemplate {
   return template
 }
 
-function createVirtualDocument(template: NextYakTemplate): VirtualCssDocument {
+function createVirtualDocument(template: Template): VirtualCssDocument {
   const virtualCssText = createVirtualCssText(template)
 
   return {
-    document: TextDocument.create('next-yak:test', 'css', 1, virtualCssText.text),
+    document: TextDocument.create('yak:test', 'css', 1, virtualCssText.text),
     prefixLength: virtualCssText.prefixLength,
     sourceLength: template.maskedBody.length,
     sourceStart: template.bodyStart,
@@ -58,7 +58,7 @@ function codeAction(virtualCss: VirtualCssDocument, ranges: readonly { newText: 
   }
 }
 
-describe('next-yak CSS code actions', () => {
+describe('yak CSS code actions', () => {
   it('maps a single-line virtual CSS replacement back to the host template', () => {
     const source = styledSource('colro: red;')
     const template = createTemplate(source, 'colro')
@@ -129,7 +129,7 @@ describe('next-yak CSS code actions', () => {
         edit: {
           documentChanges: [{
             edits: [valid],
-            textDocument: { uri: 'next-yak:other', version: virtualCss.document.version },
+            textDocument: { uri: 'yak:other', version: virtualCss.document.version },
           }],
         },
       },
