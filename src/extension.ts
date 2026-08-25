@@ -30,13 +30,11 @@ import {
   getNextYakCssColors,
   type NextYakCssColorPresentation,
 } from './nextYakColors'
-import { getNextYakStaticHighlightRanges } from './nextYakStaticHighlight'
 import {
   createVirtualCssText,
   getAtRuleCompletionContext,
   getSelectorCompletionContext,
   mapVirtualRangeToSourceOffsets,
-  NextYakStaticTemplateCache,
   type AtRuleCompletionContext,
   NextYakTemplateCache,
   type NextYakTemplate,
@@ -92,13 +90,6 @@ type CssCompletionService = Pick<CssLanguageService, 'doComplete' | 'parseStyles
 
 export function activate(context: vscode.ExtensionContext) {
   const templateCache = new NextYakTemplateCache()
-  const staticTemplateCache = new NextYakStaticTemplateCache()
-  const staticTemplateHighlight = vscode.window.createTextEditorDecorationType({
-    borderColor: new vscode.ThemeColor('editorInfo.foreground'),
-    borderStyle: 'solid',
-    borderWidth: '0 0 1px 0',
-    rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed,
-  })
   const completionProvider = new NextYakCssCompletionProvider(templateCache)
   const hoverProvider = new NextYakCssHoverProvider(templateCache)
   const diagnostics = vscode.languages.createDiagnosticCollection('next-yak CSS')
@@ -116,46 +107,19 @@ export function activate(context: vscode.ExtensionContext) {
     }
   }
 
-  const refreshStaticTemplateHighlights = (editor: vscode.TextEditor) => {
-    if (!isNextYakDocument(editor.document)) {
-      editor.setDecorations(staticTemplateHighlight, [])
-      return
-    }
-
-    const document = getNextYakTemplateDocument(editor.document)
-    const ranges = getNextYakStaticHighlightRanges(document, staticTemplateCache)
-      .map((range) => toDocumentRangeFromOffsets(editor.document, range))
-
-    editor.setDecorations(staticTemplateHighlight, ranges.map((range) => ({
-      hoverMessage: 'Static next-yak template pattern. CSS language features verify import ownership separately.',
-      range,
-    })))
-  }
-
-  const refreshVisibleStaticTemplateHighlights = () => {
-    vscode.window.visibleTextEditors.forEach(refreshStaticTemplateHighlights)
-  }
-
   context.subscriptions.push(
     diagnostics,
-    staticTemplateHighlight,
     vscode.workspace.onDidChangeTextDocument((event) => {
       templateCache.invalidateDocument(event.document.uri.toString())
-      staticTemplateCache.invalidateDocument(event.document.uri.toString())
       updateDiagnostics(event.document)
-      vscode.window.visibleTextEditors
-        .filter((editor) => editor.document.uri.toString() === event.document.uri.toString())
-        .forEach(refreshStaticTemplateHighlights)
     }),
     vscode.workspace.onDidCloseTextDocument((document) => {
       templateCache.invalidateDocument(document.uri.toString())
-      staticTemplateCache.invalidateDocument(document.uri.toString())
       diagnostics.delete(document.uri)
     }),
     vscode.workspace.onDidOpenTextDocument((document) => {
       updateDiagnostics(document)
     }),
-    vscode.window.onDidChangeVisibleTextEditors(refreshVisibleStaticTemplateHighlights),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration(nextYakCssValidateConfiguration)) {
         refreshDiagnostics()
@@ -176,7 +140,6 @@ export function activate(context: vscode.ExtensionContext) {
   )
 
   refreshDiagnostics()
-  refreshVisibleStaticTemplateHighlights()
 }
 
 export class NextYakCssCompletionProvider implements vscode.CompletionItemProvider {
