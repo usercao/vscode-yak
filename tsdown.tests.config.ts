@@ -11,5 +11,5 @@ export default defineConfig({
   format: 'cjs',
   outDir: '.vscode-test/compiled',
   platform: 'node',
-  target: 'node18',
+  target: 'node24',
 })

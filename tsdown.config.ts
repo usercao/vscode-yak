@@ -30,5 +30,5 @@ export default defineConfig({
   format: 'cjs',
   outDir: 'dist',
   platform: 'node',
-  target: 'node18',
+  target: 'node24',
 })
