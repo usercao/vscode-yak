@@ -3,6 +3,7 @@
 .vscode/**
 .yarnrc.yml
 docs/**
+scripts/**
 src/**
 test/**
 .vscode-test/**

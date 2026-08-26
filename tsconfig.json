@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "allowImportingTsExtensions": true,
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
@@ -8,5 +9,11 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src", "test/**/*.ts", "tsdown.config.ts", "tsdown.tests.config.ts"]
+  "include": [
+    "src",
+    "scripts/**/*.ts",
+    "test/**/*.ts",
+    "tsdown.config.ts",
+    "tsdown.tests.config.ts"
+  ]
 }
