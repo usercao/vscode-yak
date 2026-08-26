@@ -19,3 +19,4 @@ node_modules/**
 # Generated package artifacts
 build/**
 test-workspace/**
+test-workspace-extra/**

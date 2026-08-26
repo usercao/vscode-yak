@@ -24,6 +24,19 @@ export interface Template {
   tag: TemplateTag
 }
 
+export interface StaticCssMixin {
+  exported: boolean
+  name: string
+  nameEnd: number
+  nameStart: number
+  template: Template
+}
+
+export interface ProjectStyleAnalysis {
+  mixins: readonly StaticCssMixin[]
+  templates: readonly Template[]
+}
+
 export interface VirtualCssText {
   prefixLength: number
   text: string
@@ -240,6 +253,46 @@ export function findTemplate(
   const analysis = tryCreateTemplateAnalysis(source, languageId, fileName, 0, templateLibraries)
 
   return analysis ? findTemplateInAnalysis(source, cursorOffset, analysis) : undefined
+}
+
+export function analyzeProjectStyles(
+  source: string,
+  languageId: string,
+  fileName: string,
+  templateLibraries = getTemplateLibraryProfiles(),
+): ProjectStyleAnalysis {
+  const analysis = tryCreateTemplateAnalysis(source, languageId, fileName, 0, templateLibraries)
+
+  if (!analysis) {
+    return { mixins: [], templates: [] }
+  }
+
+  const mixins: StaticCssMixin[] = []
+  const templates: Template[] = []
+
+  for (const taggedTemplate of analysis.taggedTemplates) {
+    const template = createTemplate(
+      source,
+      analysis.sourceFile,
+      taggedTemplate.node,
+      taggedTemplate.library,
+      taggedTemplate.tag,
+    )
+
+    if (!template) {
+      continue
+    }
+
+    templates.push(template)
+
+    const mixin = createStaticCssMixin(analysis.sourceFile, taggedTemplate, template)
+
+    if (mixin) {
+      mixins.push(mixin)
+    }
+  }
+
+  return { mixins, templates }
 }
 
 function matchesDocument(
@@ -656,6 +709,48 @@ function createTemplate(
     library,
     maskedBody: maskInterpolations(body, scannedTemplate.interpolations),
     tag,
+  }
+}
+
+function createStaticCssMixin(
+  sourceFile: ts.SourceFile,
+  taggedTemplate: TaggedTemplate,
+  template: Template,
+): StaticCssMixin | undefined {
+  if (taggedTemplate.tag !== 'css' || template.interpolations.length > 0) {
+    return undefined
+  }
+
+  const variableDeclaration = taggedTemplate.node.parent
+
+  if (
+    !ts.isVariableDeclaration(variableDeclaration) ||
+    variableDeclaration.initializer !== taggedTemplate.node ||
+    !ts.isIdentifier(variableDeclaration.name)
+  ) {
+    return undefined
+  }
+
+  const declarationList = variableDeclaration.parent
+
+  if (
+    !ts.isVariableDeclarationList(declarationList) ||
+    (declarationList.flags & ts.NodeFlags.Const) === 0
+  ) {
+    return undefined
+  }
+
+  const statement = declarationList.parent
+  const exported =
+    ts.isVariableStatement(statement) &&
+    statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) === true
+
+  return {
+    exported,
+    name: variableDeclaration.name.text,
+    nameEnd: variableDeclaration.name.end,
+    nameStart: variableDeclaration.name.getStart(sourceFile),
+    template,
   }
 }
 

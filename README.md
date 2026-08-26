@@ -1,6 +1,6 @@
 # vscode-yak
 
-MVP VS Code extension that provides CSS syntax highlighting, folding, and IntelliSense for `next-yak` tagged templates, with optional `styled-components` compatibility.
+VS Code extension that provides CSS syntax highlighting, folding, IntelliSense, and project CSS navigation for `next-yak` tagged templates, with optional `styled-components` compatibility.
 
 ## Package
 

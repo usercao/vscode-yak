@@ -2,13 +2,19 @@ import * as vscode from 'vscode'
 
 import type { CssLanguageRuntime } from './extension'
 import type { CssFoldingProvider } from './folding'
+import type { ProjectCssIndexRuntime } from './projectIndexRuntime'
 import { getTemplateLibraryProfiles, templateLibraryIds } from './templateLibraries'
 
-const supportedDocumentSelector: vscode.DocumentSelector = [
+const supportedDocumentFilters: vscode.DocumentFilter[] = [
   { language: 'javascript' },
   { language: 'javascriptreact' },
   { language: 'typescript' },
   { language: 'typescriptreact' },
+]
+const supportedDocumentSelector: vscode.DocumentSelector = supportedDocumentFilters
+const projectIndexDocumentSelector: vscode.DocumentSelector = [
+  ...supportedDocumentFilters,
+  { language: 'css' },
 ]
 const cssCompletionTriggerCharacters =
   'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ:-@'.split('')
@@ -36,7 +42,10 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
   let isDisposed = false
   let foldingProviderPromise: Promise<CssFoldingProvider> | undefined
   let hasReportedFoldingProviderError = false
+  let hasReportedProjectIndexRuntimeError = false
   let hasReportedRuntimeError = false
+  let projectIndexRuntime: ProjectCssIndexRuntime | undefined
+  let projectIndexRuntimePromise: Promise<ProjectCssIndexRuntime> | undefined
   let hasSettledReady = false
   let rejectReady!: (reason?: unknown) => void
   let resolveReady!: () => void
@@ -58,6 +67,13 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
     if (!hasReportedFoldingProviderError) {
       hasReportedFoldingProviderError = true
       console.error('Unable to load the yak CSS folding provider.', error)
+    }
+  }
+
+  const reportProjectIndexRuntimeError = (error: unknown) => {
+    if (!hasReportedProjectIndexRuntimeError) {
+      hasReportedProjectIndexRuntimeError = true
+      console.error('Unable to load the yak project CSS index.', error)
     }
   }
 
@@ -96,6 +112,23 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
     )
 
     return foldingProviderPromise
+  }
+
+  const loadProjectIndexRuntime = () => {
+    projectIndexRuntimePromise ??= import('./projectIndexRuntime').then(
+      ({ createProjectCssIndexRuntime }) => {
+        const loadedRuntime = createProjectCssIndexRuntime()
+        projectIndexRuntime = loadedRuntime
+
+        if (isDisposed) {
+          loadedRuntime.dispose()
+        }
+
+        return loadedRuntime
+      },
+    )
+
+    return projectIndexRuntimePromise
   }
 
   const mightContainEnabledTemplateLibraryImport = (document: vscode.TextDocument) => {
@@ -163,6 +196,24 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
     }
   }
 
+  const useProjectIndexRuntime = async <Result>(
+    callback: (loadedRuntime: ProjectCssIndexRuntime) => Result | PromiseLike<Result>,
+    fallback: Result,
+  ): Promise<Result> => {
+    if (isDisposed) {
+      return fallback
+    }
+
+    try {
+      const loadedRuntime = await loadProjectIndexRuntime()
+
+      return isDisposed ? fallback : await callback(loadedRuntime)
+    } catch (error) {
+      reportProjectIndexRuntimeError(error)
+      return fallback
+    }
+  }
+
   const refreshDiagnostics = (loadedRuntime: CssLanguageRuntime) => {
     for (const document of vscode.workspace.textDocuments) {
       if (mightContainEnabledTemplateLibraryImport(document)) {
@@ -202,6 +253,16 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
         }
       },
     )
+  }
+
+  const preloadProjectIndex = (document: vscode.TextDocument | undefined) => {
+    if (!document || !mightContainEnabledTemplateLibraryImport(document)) {
+      return
+    }
+
+    void useProjectIndexRuntime((loadedRuntime) => {
+      loadedRuntime.start()
+    }, undefined)
   }
 
   const updateDiagnostics = (document: vscode.TextDocument) => {
@@ -341,10 +402,61 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
       )
     },
   }
+  const projectCompletionProvider: vscode.CompletionItemProvider = {
+    async provideCompletionItems(document, position, token) {
+      if (token.isCancellationRequested || !mightContainEnabledTemplateLibraryImport(document)) {
+        return undefined
+      }
+
+      return useProjectIndexRuntime(
+        (loadedRuntime) => loadedRuntime.provideCompletionItems(document, position, token),
+        undefined,
+      )
+    },
+  }
+  const projectDefinitionProvider: vscode.DefinitionProvider = {
+    async provideDefinition(document, position, token) {
+      if (token.isCancellationRequested || !isProjectIndexDocument(document)) {
+        return undefined
+      }
+
+      return useProjectIndexRuntime(
+        (loadedRuntime) => loadedRuntime.provideDefinition(document, position, token),
+        undefined,
+      )
+    },
+  }
+  const projectHoverProvider: vscode.HoverProvider = {
+    async provideHover(document, position, token) {
+      if (token.isCancellationRequested || !isProjectIndexDocument(document)) {
+        return undefined
+      }
+
+      return useProjectIndexRuntime(
+        (loadedRuntime) => loadedRuntime.provideHover(document, position, token),
+        undefined,
+      )
+    },
+  }
+  const projectReferenceProvider: vscode.ReferenceProvider = {
+    async provideReferences(document, position, referenceContext, token) {
+      if (token.isCancellationRequested || !isProjectIndexDocument(document)) {
+        return undefined
+      }
+
+      return useProjectIndexRuntime(
+        (loadedRuntime) =>
+          loadedRuntime.provideReferences(document, position, referenceContext, token),
+        undefined,
+      )
+    },
+  }
 
   runtimePreloadTimer = setTimeout(() => {
     runtimePreloadTimer = undefined
-    preloadRuntime(vscode.window.activeTextEditor?.document, true)
+    const activeDocument = vscode.window.activeTextEditor?.document
+    preloadRuntime(activeDocument, true)
+    preloadProjectIndex(activeDocument)
   }, 0)
 
   context.subscriptions.push(
@@ -362,6 +474,7 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
     vscode.window.onDidChangeActiveTextEditor((editor) => {
       if (editor) {
         updateDiagnostics(editor.document)
+        preloadProjectIndex(editor.document)
       }
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
@@ -399,6 +512,20 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
     }),
     vscode.languages.registerColorProvider(supportedDocumentSelector, colorProvider),
     vscode.languages.registerFoldingRangeProvider(supportedDocumentSelector, foldingProvider),
+    vscode.languages.registerCompletionItemProvider(
+      supportedDocumentSelector,
+      projectCompletionProvider,
+      ...cssCompletionTriggerCharacters,
+    ),
+    vscode.languages.registerDefinitionProvider(
+      projectIndexDocumentSelector,
+      projectDefinitionProvider,
+    ),
+    vscode.languages.registerHoverProvider(projectIndexDocumentSelector, projectHoverProvider),
+    vscode.languages.registerReferenceProvider(
+      projectIndexDocumentSelector,
+      projectReferenceProvider,
+    ),
     new vscode.Disposable(() => {
       isDisposed = true
 
@@ -408,8 +535,17 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
 
       rejectWhenReady(new Error('The yak CSS language runtime was disposed before initialization.'))
       runtime?.dispose()
+      projectIndexRuntime?.dispose()
     }),
   )
 
   return { whenReady }
+}
+
+function isProjectIndexDocument(document: vscode.TextDocument) {
+  return document.languageId === 'css' || mightBeProjectIndexTemplateDocument(document)
+}
+
+function mightBeProjectIndexTemplateDocument(document: vscode.TextDocument) {
+  return supportedLanguageIds.has(document.languageId)
 }

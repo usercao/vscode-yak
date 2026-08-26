@@ -22,7 +22,10 @@ const completionLatencyBudgetMilliseconds = {
 } as const
 const activationEntrySizeBudgetBytes = 64 * 1024
 const foldingEntrySizeBudgetBytes = 64 * 1024
+const projectIndexEntrySizeBudgetBytes = 128 * 1024
 const largeDocumentTemplateCount = 250
+const projectIndexUpdatePollMilliseconds = 50
+const projectIndexUpdateTimeoutMilliseconds = 5_000
 type CssCompletionService = Pick<CssLanguageService, 'doComplete' | 'parseStylesheet'>
 
 interface CompletionOptions {
@@ -322,6 +325,64 @@ async function runCase(name: string, callback: () => Promise<void>): Promise<voi
   }
 }
 
+async function waitForProjectIndexUpdate(
+  condition: () => Promise<boolean>,
+  message: string,
+): Promise<void> {
+  const deadline = Date.now() + projectIndexUpdateTimeoutMilliseconds
+
+  while (Date.now() < deadline) {
+    if (await condition()) {
+      return
+    }
+
+    await new Promise<void>((resolve) => setTimeout(resolve, projectIndexUpdatePollMilliseconds))
+  }
+
+  assert.fail(message)
+}
+
+async function updateWorkspaceFolders(
+  update: () => boolean,
+  isApplied: () => boolean,
+  message: string,
+): Promise<void> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  let subscription: vscode.Disposable | undefined
+
+  const didChange = new Promise<void>((resolve, reject) => {
+    subscription = vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      if (timeout !== undefined) {
+        clearTimeout(timeout)
+      }
+      resolve()
+    })
+    timeout = setTimeout(
+      () => reject(new Error(`${message}; no workspace folder change event`)),
+      projectIndexUpdateTimeoutMilliseconds,
+    )
+  })
+
+  if (!update()) {
+    if (timeout !== undefined) {
+      clearTimeout(timeout)
+    }
+    subscription?.dispose()
+    throw new Error(`${message}; updateWorkspaceFolders returned false`)
+  }
+
+  try {
+    await didChange
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout)
+    }
+    subscription?.dispose()
+  }
+
+  await waitForProjectIndexUpdate(async () => isApplied(), message)
+}
+
 async function createDirectProvider(
   extensionPath: string,
   cssCompletionService?: CssCompletionService,
@@ -502,6 +563,36 @@ async function registeredFoldingRanges(
   )
 }
 
+async function registeredDefinitionsAt(
+  document: vscode.TextDocument,
+  offset: number,
+): Promise<readonly vscode.Location[]> {
+  await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true })
+
+  return (
+    (await vscode.commands.executeCommand<vscode.Location[]>(
+      'vscode.executeDefinitionProvider',
+      document.uri,
+      document.positionAt(offset),
+    )) ?? []
+  )
+}
+
+async function registeredReferencesAt(
+  document: vscode.TextDocument,
+  offset: number,
+): Promise<readonly vscode.Location[]> {
+  await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true })
+
+  return (
+    (await vscode.commands.executeCommand<vscode.Location[]>(
+      'vscode.executeReferenceProvider',
+      document.uri,
+      document.positionAt(offset),
+    )) ?? []
+  )
+}
+
 function diagnosticsFor(document: vscode.TextDocument): readonly vscode.Diagnostic[] {
   return vscode.languages
     .getDiagnostics(document.uri)
@@ -550,6 +641,9 @@ export async function run(): Promise<void> {
 
     const activationEntry = await stat(join(extension.extensionPath, 'dist', 'activation.mjs'))
     const foldingEntry = await stat(join(extension.extensionPath, 'dist', 'folding.mjs'))
+    const projectIndexEntry = await stat(
+      join(extension.extensionPath, 'dist', 'projectIndexRuntime.mjs'),
+    )
 
     assert.ok(
       activationEntry.size < activationEntrySizeBudgetBytes,
@@ -558,6 +652,10 @@ export async function run(): Promise<void> {
     assert.ok(
       foldingEntry.size < foldingEntrySizeBudgetBytes,
       `Expected independently loaded folding entry under ${foldingEntrySizeBudgetBytes} bytes; got ${foldingEntry.size} bytes`,
+    )
+    assert.ok(
+      projectIndexEntry.size < projectIndexEntrySizeBudgetBytes,
+      `Expected independently loaded project index entry under ${projectIndexEntrySizeBudgetBytes} bytes; got ${projectIndexEntry.size} bytes`,
     )
   })
 
@@ -611,6 +709,231 @@ export async function run(): Promise<void> {
       ranges.some((range) => range.start === 4 && range.end === 6),
       'Expected a folding range for the nested media rule',
     )
+  })
+
+  await runCase('indexes workspace CSS tokens and static mixins', async () => {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
+    assert.ok(workspaceFolder, 'Expected the Extension Host test workspace')
+
+    const document = await vscode.workspace.openTextDocument(
+      vscode.Uri.joinPath(workspaceFolder.uri, 'projectIndexConsumer.tsx'),
+    )
+    const source = document.getText()
+    const buttonTokenOffset = source.indexOf('--but') + '--but'.length
+    const brandTokenOffset = source.indexOf('--brand') + 3
+    const mixinOffset = source.indexOf('comp') + 'comp'.length
+    const tokenCompletions = await completionItemsAt(document, buttonTokenOffset)
+    const tokenItem = extensionItems(tokenCompletions).find(
+      (item) => completionLabel(item) === 'var(--button-accent)',
+    )
+    const mixinCompletions = await completionItemsAt(document, mixinOffset)
+    const mixinItem = extensionItems(mixinCompletions).find(
+      (item) => completionLabel(item) === 'compact',
+    )
+    const definitions = await registeredDefinitionsAt(document, brandTokenOffset)
+    const references = await registeredReferencesAt(document, brandTokenOffset)
+    const hovers = await registeredHoversAt(document, brandTokenOffset)
+
+    assert.ok(tokenItem, 'Expected a CSS Module token completion')
+    assert.equal(completionInsertText(tokenItem), '--button-accent')
+    assert.ok(mixinItem, 'Expected an exported static CSS mixin completion')
+    assert.equal(completionInsertText(mixinItem), 'compact')
+    assert.ok(
+      mixinItem.additionalTextEdits?.some((edit) =>
+        edit.newText.includes("import { compact } from './mixins'"),
+      ),
+      'Expected a safe named import for the external mixin',
+    )
+    assert.ok(
+      definitions.some((location) => location.uri.path.endsWith('/tokens.css')),
+      'Expected Go to Definition to locate the workspace token definition',
+    )
+    assert.ok(
+      references.some((location) => location.uri.path.endsWith('/tokens.css')) &&
+        references.some((location) => location.uri.toString() === document.uri.toString()),
+      'Expected Find References to include the definition and yak usage',
+    )
+    assert.ok(
+      hovers.some((hover) => hoverContentText(hover).includes('tokens.css')),
+      'Expected token hover to identify its workspace source file',
+    )
+  })
+
+  await runCase('updates the project CSS index for workspace file lifecycle changes', async () => {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
+    assert.ok(workspaceFolder, 'Expected the Extension Host test workspace')
+
+    const fixtureDirectory = vscode.Uri.joinPath(workspaceFolder.uri, '.yak-project-index-fixture')
+    const originalUri = vscode.Uri.joinPath(fixtureDirectory, 'lifecycle.css')
+    const renamedUri = vscode.Uri.joinPath(fixtureDirectory, 'renamed.css')
+    const consumerSource = [
+      "import { styled } from 'next-yak'",
+      'const LifecyclePanel = styled.div`',
+      '  color: var(--lifecycle-);',
+      '`',
+    ].join('\n')
+    const consumer = await vscode.workspace.openTextDocument({
+      content: consumerSource,
+      language: 'typescriptreact',
+    })
+    const completionOffset = consumerSource.indexOf('--lifecycle-') + '--lifecycle-'.length
+    const referenceSource = [
+      "import { styled } from 'next-yak'",
+      'const LifecycleReference = styled.div`',
+      '  color: var(--lifecycle-next);',
+      '`',
+    ].join('\n')
+    const reference = await vscode.workspace.openTextDocument({
+      content: referenceSource,
+      language: 'typescriptreact',
+    })
+    const referenceOffset = referenceSource.indexOf('--lifecycle-next') + 4
+    const projectCompletionLabels = async () =>
+      extensionItems(await completionItemsAt(consumer, completionOffset)).map(completionLabel)
+
+    try {
+      await vscode.workspace.fs.createDirectory(fixtureDirectory)
+      await vscode.workspace.fs.writeFile(
+        originalUri,
+        new TextEncoder().encode(':root { --lifecycle-token: #176b5b; }\n'),
+      )
+
+      await waitForProjectIndexUpdate(
+        async () => (await projectCompletionLabels()).includes('var(--lifecycle-token)'),
+        'Expected a newly created workspace token to appear in completion',
+      )
+
+      const tokenDocument = await vscode.workspace.openTextDocument(originalUri)
+      const edit = new vscode.WorkspaceEdit()
+      edit.replace(
+        originalUri,
+        new vscode.Range(
+          tokenDocument.positionAt(0),
+          tokenDocument.positionAt(tokenDocument.getText().length),
+        ),
+        ':root { --lifecycle-next: #176b5b; }\n',
+      )
+      assert.ok(await vscode.workspace.applyEdit(edit), 'Expected the token file edit to apply')
+      assert.ok(await tokenDocument.save(), 'Expected the token file edit to save')
+
+      await waitForProjectIndexUpdate(async () => {
+        const labels = await projectCompletionLabels()
+        return (
+          labels.includes('var(--lifecycle-next)') && !labels.includes('var(--lifecycle-token)')
+        )
+      }, 'Expected an edited workspace token to replace its stale completion')
+
+      await vscode.workspace.fs.rename(originalUri, renamedUri, { overwrite: false })
+
+      await waitForProjectIndexUpdate(
+        async () =>
+          (await registeredDefinitionsAt(reference, referenceOffset)).some(
+            (location) => location.uri.toString() === renamedUri.toString(),
+          ),
+        'Expected Go to Definition to follow a renamed workspace token file',
+      )
+
+      await vscode.workspace.fs.delete(renamedUri, { useTrash: false })
+
+      await waitForProjectIndexUpdate(
+        async () =>
+          !(await registeredDefinitionsAt(reference, referenceOffset)).some(
+            (location) => location.uri.toString() === renamedUri.toString(),
+          ),
+        'Expected a deleted workspace token file to be removed from Go to Definition',
+      )
+    } finally {
+      await vscode.workspace.fs.delete(fixtureDirectory, { recursive: true, useTrash: false })
+    }
+  })
+
+  await runCase('reindexes project CSS when workspace folders change', async () => {
+    const workspaceFolders = vscode.workspace.workspaceFolders
+    assert.ok(workspaceFolders, 'Expected Extension Host workspace folders')
+
+    const additionalFolder = workspaceFolders.find(
+      (folder) => folder.name === 'test-workspace-extra',
+    )
+    assert.ok(additionalFolder, 'Expected the additional project index workspace fixture')
+
+    const consumerSource = [
+      "import { styled } from 'next-yak'",
+      'const WorkspaceFolderPanel = styled.div`',
+      '  color: var(--workspace-folder-);',
+      '`',
+    ].join('\n')
+    const consumer = await vscode.workspace.openTextDocument({
+      content: consumerSource,
+      language: 'typescriptreact',
+    })
+    const completionOffset =
+      consumerSource.indexOf('--workspace-folder-') + '--workspace-folder-'.length
+    const projectCompletionLabels = async () =>
+      extensionItems(await completionItemsAt(consumer, completionOffset)).map(completionLabel)
+    const isAdditionalFolderPresent = () =>
+      vscode.workspace.workspaceFolders?.some(
+        (folder) => folder.uri.toString() === additionalFolder.uri.toString(),
+      ) ?? false
+    try {
+      await waitForProjectIndexUpdate(
+        async () => (await projectCompletionLabels()).includes('var(--workspace-folder-token)'),
+        'Expected a token from the additional workspace folder before removal',
+      )
+
+      const additionalFolderIndex = vscode.workspace.workspaceFolders?.findIndex(
+        (folder) => folder.uri.toString() === additionalFolder.uri.toString(),
+      )
+
+      if (additionalFolderIndex === undefined || additionalFolderIndex < 0) {
+        throw new Error('Expected the additional folder to remain registered')
+      }
+
+      await updateWorkspaceFolders(
+        () => vscode.workspace.updateWorkspaceFolders(additionalFolderIndex, 1),
+        () => !isAdditionalFolderPresent(),
+        'Expected the additional workspace folder to be removed',
+      )
+
+      await waitForProjectIndexUpdate(
+        async () => !(await projectCompletionLabels()).includes('var(--workspace-folder-token)'),
+        'Expected a removed workspace folder token to leave completion',
+      )
+
+      await updateWorkspaceFolders(
+        () =>
+          vscode.workspace.updateWorkspaceFolders(
+            vscode.workspace.workspaceFolders?.length ?? 0,
+            null,
+            {
+              uri: additionalFolder.uri,
+              name: additionalFolder.name,
+            },
+          ),
+        isAdditionalFolderPresent,
+        'Expected the additional workspace folder to be restored',
+      )
+
+      await waitForProjectIndexUpdate(
+        async () => (await projectCompletionLabels()).includes('var(--workspace-folder-token)'),
+        'Expected a restored workspace folder token to return to completion',
+      )
+    } finally {
+      if (!isAdditionalFolderPresent()) {
+        await updateWorkspaceFolders(
+          () =>
+            vscode.workspace.updateWorkspaceFolders(
+              vscode.workspace.workspaceFolders?.length ?? 0,
+              null,
+              {
+                uri: additionalFolder.uri,
+                name: additionalFolder.name,
+              },
+            ),
+          isAdditionalFolderPresent,
+          'Expected the additional workspace folder to be restored during cleanup',
+        )
+      }
+    }
   })
 
   await runCase('completes supported yak tagged template forms', async () => {

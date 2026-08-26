@@ -35,7 +35,7 @@ export default defineConfig({
       'vscode-uri',
     ],
   },
-  entry: ['src/activation.ts', 'src/extension.ts', 'src/folding.ts'],
+  entry: ['src/activation.ts', 'src/extension.ts', 'src/folding.ts', 'src/projectIndexRuntime.ts'],
   format: 'esm',
   outDir: 'dist',
   platform: 'node',
