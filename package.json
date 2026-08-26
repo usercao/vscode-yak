@@ -22,7 +22,7 @@
   },
   "publisher": "local",
   "type": "module",
-  "main": "./dist/extension.cjs",
+  "main": "./dist/activation.cjs",
   "scripts": {
     "build": "tsdown",
     "check": "tsc --noEmit",

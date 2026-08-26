@@ -26,7 +26,7 @@ export default defineConfig({
     ],
     neverBundle: ['vscode'],
   },
-  entry: ['src/extension.ts'],
+  entry: ['src/activation.ts', 'src/extension.ts'],
   format: 'cjs',
   outDir: 'dist',
   platform: 'node',

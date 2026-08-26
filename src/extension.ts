@@ -78,26 +78,27 @@ const nestedAtRuleNames = new Set([
 const descriptorFallbackPropertyNames = new Map<string, ReadonlySet<string>>([
   ['@font-face', new Set(['font-family'])],
 ])
-const supportedDocumentSelector: vscode.DocumentSelector = [
-  { language: 'javascript' },
-  { language: 'javascriptreact' },
-  { language: 'typescript' },
-  { language: 'typescriptreact' },
-]
 const supportedLanguageIds = new Set([
   'javascript',
   'javascriptreact',
   'typescript',
   'typescriptreact',
 ])
-const cssCompletionTriggerCharacters =
-  'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ:-@'.split('')
 const cssDiagnosticSource = 'yak CSS'
-const cssValidateConfiguration = 'yak.css.validate'
-const templateLibrariesConfiguration = 'yak.templateLibraries'
 type CssCompletionService = Pick<CssLanguageService, 'doComplete' | 'parseStylesheet'>
 
-export function activate(context: vscode.ExtensionContext) {
+export interface CssLanguageRuntime extends vscode.Disposable {
+  readonly codeActionProvider: CssCodeActionProvider
+  readonly colorProvider: CssColorProvider
+  readonly completionProvider: CssCompletionProvider
+  readonly hoverProvider: CssHoverProvider
+  clearTemplateCache(): void
+  deleteDiagnostics(uri: vscode.Uri): void
+  invalidateDocument(uri: string): void
+  updateDiagnostics(document: vscode.TextDocument): void
+}
+
+export function createCssLanguageRuntime(): CssLanguageRuntime {
   const templateCache = new TemplateCache()
   const completionProvider = new CssCompletionProvider(templateCache)
   const hoverProvider = new CssHoverProvider(templateCache)
@@ -110,49 +111,20 @@ export function activate(context: vscode.ExtensionContext) {
     diagnosticProvider.updateDocument(document)
   }
 
-  const refreshDiagnostics = () => {
-    for (const document of vscode.workspace.textDocuments) {
-      updateDiagnostics(document)
-    }
+  return {
+    codeActionProvider,
+    colorProvider,
+    completionProvider,
+    hoverProvider,
+    clearTemplateCache: () => templateCache.clear(),
+    deleteDiagnostics: (uri) => diagnostics.delete(uri),
+    dispose: () => {
+      templateCache.clear()
+      diagnostics.dispose()
+    },
+    invalidateDocument: (uri) => templateCache.invalidateDocument(uri),
+    updateDiagnostics,
   }
-
-  context.subscriptions.push(
-    diagnostics,
-    vscode.workspace.onDidChangeTextDocument((event) => {
-      templateCache.invalidateDocument(event.document.uri.toString())
-      updateDiagnostics(event.document)
-    }),
-    vscode.workspace.onDidCloseTextDocument((document) => {
-      templateCache.invalidateDocument(document.uri.toString())
-      diagnostics.delete(document.uri)
-    }),
-    vscode.workspace.onDidOpenTextDocument((document) => {
-      updateDiagnostics(document)
-    }),
-    vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration(templateLibrariesConfiguration)) {
-        templateCache.clear()
-        refreshDiagnostics()
-        return
-      }
-
-      if (event.affectsConfiguration(cssValidateConfiguration)) {
-        refreshDiagnostics()
-      }
-    }),
-    vscode.languages.registerCompletionItemProvider(
-      supportedDocumentSelector,
-      completionProvider,
-      ...cssCompletionTriggerCharacters,
-    ),
-    vscode.languages.registerHoverProvider(supportedDocumentSelector, hoverProvider),
-    vscode.languages.registerCodeActionsProvider(supportedDocumentSelector, codeActionProvider, {
-      providedCodeActionKinds: [vscode.CodeActionKind.QuickFix],
-    }),
-    vscode.languages.registerColorProvider(supportedDocumentSelector, colorProvider),
-  )
-
-  refreshDiagnostics()
 }
 
 export class CssCompletionProvider implements vscode.CompletionItemProvider {

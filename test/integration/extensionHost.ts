@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -19,6 +20,7 @@ const completionLatencyBudgetMilliseconds = {
   manualTrigger: 2_000,
   singleCharacter: 1_500,
 } as const
+const activationEntrySizeBudgetBytes = 64 * 1024
 const largeDocumentTemplateCount = 250
 type CssCompletionService = Pick<CssLanguageService, 'doComplete' | 'parseStylesheet'>
 
@@ -104,6 +106,10 @@ interface ExtensionModule {
     CssCompletionProvider?: DirectCompletionProviderConstructor
     CssHoverProvider?: DirectHoverProviderConstructor
   }
+}
+
+interface ActivationApi {
+  whenReady: PromiseLike<void>
 }
 
 function completionLabel(item: vscode.CompletionItem): string {
@@ -524,7 +530,35 @@ export async function run(): Promise<void> {
   const extension = vscode.extensions.getExtension('local.vscode-yak')
 
   assert.ok(extension, 'The yak extension should be available in the Extension Development Host')
-  await extension.activate()
+
+  await runCase('keeps the synchronous activation entry lightweight', async () => {
+    assert.equal(extension.packageJSON.main, './dist/activation.cjs')
+
+    const activationEntry = await stat(join(extension.extensionPath, 'dist', 'activation.cjs'))
+
+    assert.ok(
+      activationEntry.size < activationEntrySizeBudgetBytes,
+      `Expected activation entry under ${activationEntrySizeBudgetBytes} bytes; got ${activationEntry.size} bytes`,
+    )
+  })
+
+  const activationApi = (await extension.activate()) as ActivationApi
+
+  assert.ok(activationApi.whenReady, 'Expected the activation entry to expose runtime readiness')
+
+  const startupSource = styledSource('col')
+  const startupCursorOffset = startupSource.indexOf(cursorMarker)
+  const startupDocument = await vscode.workspace.openTextDocument({
+    language: 'typescriptreact',
+    content: startupSource.replace(cursorMarker, ''),
+  })
+  const startupCompletions = await completionItemsAt(startupDocument, startupCursorOffset)
+
+  assert.ok(
+    findExtensionItem(startupCompletions, 'color'),
+    'Expected the first completion request to wait for the lazy language runtime',
+  )
+  await activationApi.whenReady
 
   await runCase('completes CSS properties in every supported host language', async () => {
     for (const language of ['javascript', 'javascriptreact', 'typescript', 'typescriptreact']) {
