@@ -488,6 +488,19 @@ async function registeredColorPresentations(
   )
 }
 
+async function registeredFoldingRanges(
+  document: vscode.TextDocument,
+): Promise<readonly vscode.FoldingRange[]> {
+  await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true })
+
+  return (
+    (await vscode.commands.executeCommand<vscode.FoldingRange[]>(
+      'vscode.executeFoldingRangeProvider',
+      document.uri,
+    )) ?? []
+  )
+}
+
 function diagnosticsFor(document: vscode.TextDocument): readonly vscode.Diagnostic[] {
   return vscode.languages
     .getDiagnostics(document.uri)
@@ -564,6 +577,34 @@ export async function run(): Promise<void> {
     for (const language of ['javascript', 'javascriptreact', 'typescript', 'typescriptreact']) {
       await assertPropertyCompletion({ language, source: styledSource() })
     }
+  })
+
+  await runCase('folds CSS blocks inside tagged templates', async () => {
+    const source = [
+      "import { styled } from 'next-yak'",
+      'const Panel = styled.section`',
+      '  h2 {',
+      '    color: red;',
+      '    @media (min-width: 48rem) {',
+      '      color: blue;',
+      '    }',
+      '  }',
+      '`',
+    ].join('\n')
+    const document = await vscode.workspace.openTextDocument({
+      language: 'typescriptreact',
+      content: source,
+    })
+    const ranges = await registeredFoldingRanges(document)
+
+    assert.ok(
+      ranges.some((range) => range.start === 2 && range.end === 7),
+      'Expected a folding range for the h2 CSS rule',
+    )
+    assert.ok(
+      ranges.some((range) => range.start === 4 && range.end === 6),
+      'Expected a folding range for the nested media rule',
+    )
   })
 
   await runCase('completes supported yak tagged template forms', async () => {

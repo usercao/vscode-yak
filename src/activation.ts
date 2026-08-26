@@ -189,6 +189,25 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
       )
     },
   }
+  const foldingProvider: vscode.FoldingRangeProvider = {
+    async provideFoldingRanges(document, foldingContext, token) {
+      if (token.isCancellationRequested) {
+        return undefined
+      }
+
+      if (!mightContainEnabledTemplateLibraryImport(document)) {
+        return undefined
+      }
+
+      return useRuntime(
+        (loadedRuntime) =>
+          token.isCancellationRequested
+            ? undefined
+            : loadedRuntime.foldingProvider.provideFoldingRanges(document, foldingContext, token),
+        undefined,
+      )
+    },
+  }
 
   runtimeStartTimer = setTimeout(() => {
     runtimeStartTimer = undefined
@@ -257,6 +276,7 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
       providedCodeActionKinds: [vscode.CodeActionKind.QuickFix],
     }),
     vscode.languages.registerColorProvider(supportedDocumentSelector, colorProvider),
+    vscode.languages.registerFoldingRangeProvider(supportedDocumentSelector, foldingProvider),
     new vscode.Disposable(() => {
       isDisposed = true
 

@@ -2,7 +2,7 @@
   "name": "vscode-yak",
   "displayName": "vscode-yak",
   "version": "0.1.0",
-  "description": "CSS syntax highlighting and completion for yak tagged templates.",
+  "description": "CSS syntax highlighting, folding, and IntelliSense for yak tagged templates.",
   "categories": [
     "Programming Languages"
   ],
