@@ -279,6 +279,39 @@ describe('yak TextMate grammar', () => {
   )
 
   it.each([
+    ['TypeScript', 'source.ts'],
+    ['TypeScript React', 'source.tsx'],
+    ['JavaScript', 'source.js'],
+    ['JavaScript React', 'source.js.jsx'],
+  ])('does not statically highlight unsupported withConfig chains in %s', async (_, scopeName) => {
+    const grammar = await loadGrammar(scopeName)
+
+    if (!grammar) {
+      throw new Error(`Unable to load ${scopeName} grammar`)
+    }
+
+    let ruleStack = INITIAL
+    const lines = [
+      "import { styled } from 'next-yak'",
+      "const Button = styled.button.withConfig({ displayName: 'Button' })`",
+      '  color: red;',
+      '`',
+      'const after = true',
+    ]
+    const tokenizedLines = lines.map((line) => {
+      const result = grammar.tokenizeLine(line, ruleStack)
+      ruleStack = result.ruleStack
+      return result.tokens
+    })
+
+    expect(scopesAtOffset(lines[2], tokenizedLines[2], lines[2].indexOf('color'))).not.toContain(
+      'support.type.property-name.css',
+    )
+    expect(scopesAtOffset(lines[4], tokenizedLines[4], lines[4].indexOf('const'))).not.toContain(
+      'source.css',
+    )
+  })
+  it.each([
     ['TypeScript React', 'source.tsx'],
     ['JavaScript React', 'source.js.jsx'],
   ])('highlights direct and namespace css prop templates in %s', async (_, scopeName) => {
