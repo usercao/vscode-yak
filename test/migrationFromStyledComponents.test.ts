@@ -1,9 +1,17 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
 import * as ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 
 import { analyzeProjectStyles, findTemplate, type TemplateTag } from '../src/template'
 
 const fixtureFileName = '/migration-from-styled-components.tsx'
+const manualFixtureFileName = '/test-workspace/example.tsx'
+const manualFixtureSource = readFileSync(
+  fileURLToPath(new URL('../test-workspace/example.tsx', import.meta.url)),
+  'utf8',
+)
 
 interface MigratedTemplateExample {
   expectedTags: readonly TemplateTag[]
@@ -531,6 +539,54 @@ function getSyntaxDiagnostics(example: SyntaxOnlyMigrationExample) {
 }
 
 describe('next-yak migration from styled-components examples', () => {
+  it('keeps every migrated tagged-template example in the manual fixture', () => {
+    const analysis = analyzeProjectStyles(
+      manualFixtureSource,
+      'typescriptreact',
+      manualFixtureFileName,
+    )
+    const tagCounts = analysis.templates.reduce<Record<TemplateTag, number>>(
+      (counts, template) => ({
+        ...counts,
+        [template.tag]: counts[template.tag] + 1,
+      }),
+      { css: 0, globalStyle: 0, keyframes: 0, styled: 0 },
+    )
+
+    expect(tagCounts).toEqual({ css: 12, globalStyle: 2, keyframes: 2, styled: 20 })
+    expect(analysis.mixins.map((mixin) => mixin.name).sort()).toEqual([
+      'responsiveRules',
+      'staticMigrationMixin',
+    ])
+
+    for (const fixtureSymbol of [
+      'StaticMigrationButton',
+      'StaticMixinMigrationComponent',
+      'KeyframeMigrationComponent',
+      'ComponentReferenceContainer',
+      'AttrsInput',
+      'WrappedAttrsButton',
+      'TypeSafeTitle',
+      'DynamicValueMigrationButton',
+      'DynamicCssMigrationButton',
+      'DynamicMixinMigrationComponent',
+      'MovedDynamicMixinMigrationComponent',
+      'NativeCssExternalSelectorButton',
+      'GlobalSelectorMigrationButton',
+      'GeneratedColorMigrationButton',
+      'StaticCssPropMigrationExample',
+      'DynamicCssPropMigrationExample',
+      'CalculatedValueMigrationCircle',
+      'StyledComponentsSpecificityButton',
+      'TransformedDynamicValueButton',
+      'TransformedDynamicCssButton',
+      'nativeCssTranspilationConfig',
+      'debugMigrationConfig',
+    ]) {
+      expect(manualFixtureSource).toContain(fixtureSymbol)
+    }
+  })
+
   it('recognizes both sides of the documented import change', () => {
     const styledComponentsSource = [
       "import styled, { css, keyframes } from 'styled-components'",
