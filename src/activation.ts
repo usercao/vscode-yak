@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 
 import type { CssLanguageRuntime } from './extension'
+import type { CssFoldingProvider } from './folding'
 import { getTemplateLibraryProfiles, templateLibraryIds } from './templateLibraries'
 
 const supportedDocumentSelector: vscode.DocumentSelector = [
@@ -25,10 +26,16 @@ export interface ActivationApi {
 }
 
 export function activate(context: vscode.ExtensionContext): ActivationApi {
+  const templateImportCandidates = new Map<
+    string,
+    { matches: boolean; profileKey: string; version: number }
+  >()
   let runtime: CssLanguageRuntime | undefined
   let runtimePromise: Promise<CssLanguageRuntime> | undefined
-  let runtimeStartTimer: ReturnType<typeof setTimeout> | undefined
+  let runtimePreloadTimer: ReturnType<typeof setTimeout> | undefined
   let isDisposed = false
+  let foldingProviderPromise: Promise<CssFoldingProvider> | undefined
+  let hasReportedFoldingProviderError = false
   let hasReportedRuntimeError = false
   let hasSettledReady = false
   let rejectReady!: (reason?: unknown) => void
@@ -44,6 +51,13 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
     if (!hasReportedRuntimeError) {
       hasReportedRuntimeError = true
       console.error('Unable to load the yak CSS language runtime.', error)
+    }
+  }
+
+  const reportFoldingProviderError = (error: unknown) => {
+    if (!hasReportedFoldingProviderError) {
+      hasReportedFoldingProviderError = true
+      console.error('Unable to load the yak CSS folding provider.', error)
     }
   }
 
@@ -76,6 +90,43 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
     return runtimePromise
   }
 
+  const loadFoldingProvider = () => {
+    foldingProviderPromise ??= import('./folding').then(
+      ({ CssFoldingProvider }) => new CssFoldingProvider(),
+    )
+
+    return foldingProviderPromise
+  }
+
+  const mightContainEnabledTemplateLibraryImport = (document: vscode.TextDocument) => {
+    if (!supportedLanguageIds.has(document.languageId)) {
+      return false
+    }
+
+    const enabledProfileIds = vscode.workspace
+      .getConfiguration('yak', document.uri)
+      .get<readonly string[]>('templateLibraries', templateLibraryIds)
+    const profiles = getTemplateLibraryProfiles(enabledProfileIds)
+    const profileKey = profiles.map((profile) => profile.id).join(',')
+    const uri = document.uri.toString()
+    const cachedCandidate = templateImportCandidates.get(uri)
+
+    if (
+      cachedCandidate &&
+      cachedCandidate.version === document.version &&
+      cachedCandidate.profileKey === profileKey
+    ) {
+      return cachedCandidate.matches
+    }
+
+    const matches = profiles.some((profile) =>
+      profile.moduleSpecifiers.some((specifier) => document.getText().includes(specifier)),
+    )
+
+    templateImportCandidates.set(uri, { matches, profileKey, version: document.version })
+    return matches
+  }
+
   const useRuntime = async <Result>(
     callback: (loadedRuntime: CssLanguageRuntime) => Result | PromiseLike<Result>,
     fallback: Result,
@@ -94,14 +145,76 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
     }
   }
 
-  const refreshDiagnostics = (loadedRuntime: CssLanguageRuntime) => {
-    for (const document of vscode.workspace.textDocuments) {
-      loadedRuntime.updateDiagnostics(document)
+  const useFoldingProvider = async <Result>(
+    callback: (loadedFoldingProvider: CssFoldingProvider) => Result | PromiseLike<Result>,
+    fallback: Result,
+  ): Promise<Result> => {
+    if (isDisposed) {
+      return fallback
+    }
+
+    try {
+      const loadedFoldingProvider = await loadFoldingProvider()
+
+      return isDisposed ? fallback : await callback(loadedFoldingProvider)
+    } catch (error) {
+      reportFoldingProviderError(error)
+      return fallback
     }
   }
 
+  const refreshDiagnostics = (loadedRuntime: CssLanguageRuntime) => {
+    for (const document of vscode.workspace.textDocuments) {
+      if (mightContainEnabledTemplateLibraryImport(document)) {
+        loadedRuntime.updateDiagnostics(document)
+      } else {
+        loadedRuntime.invalidateDocument(document.uri.toString())
+        loadedRuntime.deleteDiagnostics(document.uri)
+      }
+    }
+  }
+
+  const preloadRuntime = (document: vscode.TextDocument | undefined, settleReady = false) => {
+    if (!document || !mightContainEnabledTemplateLibraryImport(document)) {
+      if (settleReady) {
+        resolveWhenReady()
+      }
+      return
+    }
+
+    void loadRuntime().then(
+      (loadedRuntime) => {
+        if (isDisposed) {
+          return
+        }
+
+        refreshDiagnostics(loadedRuntime)
+
+        if (settleReady) {
+          resolveWhenReady()
+        }
+      },
+      (error: unknown) => {
+        reportRuntimeError(error)
+
+        if (settleReady) {
+          rejectWhenReady(error)
+        }
+      },
+    )
+  }
+
   const updateDiagnostics = (document: vscode.TextDocument) => {
-    if (!runtime && !mightContainEnabledTemplateLibraryImport(document)) {
+    if (!mightContainEnabledTemplateLibraryImport(document)) {
+      runtime?.invalidateDocument(document.uri.toString())
+      runtime?.deleteDiagnostics(document.uri)
+      return
+    }
+
+    if (!runtime) {
+      if (vscode.window.activeTextEditor?.document === document) {
+        preloadRuntime(document)
+      }
       return
     }
 
@@ -114,6 +227,10 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
   const completionProvider: vscode.CompletionItemProvider = {
     async provideCompletionItems(document, position, token) {
       if (token.isCancellationRequested) {
+        return undefined
+      }
+
+      if (!mightContainEnabledTemplateLibraryImport(document)) {
         return undefined
       }
 
@@ -132,6 +249,10 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
         return undefined
       }
 
+      if (!mightContainEnabledTemplateLibraryImport(document)) {
+        return undefined
+      }
+
       return useRuntime(
         (loadedRuntime) =>
           token.isCancellationRequested
@@ -144,6 +265,10 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
   const codeActionProvider: vscode.CodeActionProvider = {
     async provideCodeActions(document, range, actionContext, token) {
       if (token.isCancellationRequested) {
+        return undefined
+      }
+
+      if (!mightContainEnabledTemplateLibraryImport(document)) {
         return undefined
       }
 
@@ -167,6 +292,10 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
         return undefined
       }
 
+      if (!mightContainEnabledTemplateLibraryImport(document)) {
+        return undefined
+      }
+
       return useRuntime(
         (loadedRuntime) =>
           token.isCancellationRequested
@@ -177,6 +306,10 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
     },
     async provideColorPresentations(color, colorContext, token) {
       if (token.isCancellationRequested) {
+        return []
+      }
+
+      if (!mightContainEnabledTemplateLibraryImport(colorContext.document)) {
         return []
       }
 
@@ -199,38 +332,19 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
         return undefined
       }
 
-      return useRuntime(
-        (loadedRuntime) =>
+      return useFoldingProvider(
+        (loadedFoldingProvider) =>
           token.isCancellationRequested
             ? undefined
-            : loadedRuntime.foldingProvider.provideFoldingRanges(document, foldingContext, token),
+            : loadedFoldingProvider.provideFoldingRanges(document, foldingContext, token),
         undefined,
       )
     },
   }
 
-  runtimeStartTimer = setTimeout(() => {
-    runtimeStartTimer = undefined
-
-    if (!vscode.workspace.textDocuments.some(mightContainEnabledTemplateLibraryImport)) {
-      resolveWhenReady()
-      return
-    }
-
-    void loadRuntime().then(
-      (loadedRuntime) => {
-        if (isDisposed) {
-          return
-        }
-
-        refreshDiagnostics(loadedRuntime)
-        resolveWhenReady()
-      },
-      (error: unknown) => {
-        reportRuntimeError(error)
-        rejectWhenReady(error)
-      },
-    )
+  runtimePreloadTimer = setTimeout(() => {
+    runtimePreloadTimer = undefined
+    preloadRuntime(vscode.window.activeTextEditor?.document, true)
   }, 0)
 
   context.subscriptions.push(
@@ -238,11 +352,17 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
       updateDiagnostics(event.document)
     }),
     vscode.workspace.onDidCloseTextDocument((document) => {
+      templateImportCandidates.delete(document.uri.toString())
       runtime?.invalidateDocument(document.uri.toString())
       runtime?.deleteDiagnostics(document.uri)
     }),
     vscode.workspace.onDidOpenTextDocument((document) => {
       updateDiagnostics(document)
+    }),
+    vscode.window.onDidChangeActiveTextEditor((editor) => {
+      if (editor) {
+        updateDiagnostics(editor.document)
+      }
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
       const templateLibrariesChanged = event.affectsConfiguration(templateLibrariesConfiguration)
@@ -251,10 +371,12 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
         return
       }
 
-      if (
-        !runtime &&
-        !vscode.workspace.textDocuments.some(mightContainEnabledTemplateLibraryImport)
-      ) {
+      if (templateLibrariesChanged) {
+        templateImportCandidates.clear()
+      }
+
+      if (!runtime) {
+        preloadRuntime(vscode.window.activeTextEditor?.document)
         return
       }
 
@@ -280,8 +402,8 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
     new vscode.Disposable(() => {
       isDisposed = true
 
-      if (runtimeStartTimer !== undefined) {
-        clearTimeout(runtimeStartTimer)
+      if (runtimePreloadTimer !== undefined) {
+        clearTimeout(runtimePreloadTimer)
       }
 
       rejectWhenReady(new Error('The yak CSS language runtime was disposed before initialization.'))
@@ -290,19 +412,4 @@ export function activate(context: vscode.ExtensionContext): ActivationApi {
   )
 
   return { whenReady }
-}
-
-function mightContainEnabledTemplateLibraryImport(document: vscode.TextDocument) {
-  if (!supportedLanguageIds.has(document.languageId)) {
-    return false
-  }
-
-  const enabledProfileIds = vscode.workspace
-    .getConfiguration('yak', document.uri)
-    .get<readonly string[]>('templateLibraries', templateLibraryIds)
-  const source = document.getText()
-
-  return getTemplateLibraryProfiles(enabledProfileIds).some((profile) =>
-    profile.moduleSpecifiers.some((specifier) => source.includes(specifier)),
-  )
 }

@@ -24,7 +24,6 @@ import {
   type MappedCssColorPresentation,
 } from './colors'
 import { getMappedCssDiagnostics, type MappedCssDiagnostic } from './diagnostics'
-import { CssFoldingProvider } from './folding'
 import { getMappedCssHover, type VirtualCssDocument } from './hover'
 import {
   createVirtualCssText,
@@ -92,7 +91,6 @@ export interface CssLanguageRuntime extends vscode.Disposable {
   readonly codeActionProvider: CssCodeActionProvider
   readonly colorProvider: CssColorProvider
   readonly completionProvider: CssCompletionProvider
-  readonly foldingProvider: CssFoldingProvider
   readonly hoverProvider: CssHoverProvider
   clearTemplateCache(): void
   deleteDiagnostics(uri: vscode.Uri): void
@@ -108,7 +106,6 @@ export function createCssLanguageRuntime(): CssLanguageRuntime {
   const diagnosticProvider = new CssDiagnosticProvider(templateCache, diagnostics)
   const codeActionProvider = new CssCodeActionProvider(templateCache)
   const colorProvider = new CssColorProvider(templateCache)
-  const foldingProvider = new CssFoldingProvider(templateCache)
 
   const updateDiagnostics = (document: vscode.TextDocument) => {
     diagnosticProvider.updateDocument(document)
@@ -118,7 +115,6 @@ export function createCssLanguageRuntime(): CssLanguageRuntime {
     codeActionProvider,
     colorProvider,
     completionProvider,
-    foldingProvider,
     hoverProvider,
     clearTemplateCache: () => templateCache.clear(),
     deleteDiagnostics: (uri) => diagnostics.delete(uri),

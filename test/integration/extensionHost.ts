@@ -21,6 +21,7 @@ const completionLatencyBudgetMilliseconds = {
   singleCharacter: 1_500,
 } as const
 const activationEntrySizeBudgetBytes = 64 * 1024
+const foldingEntrySizeBudgetBytes = 64 * 1024
 const largeDocumentTemplateCount = 250
 type CssCompletionService = Pick<CssLanguageService, 'doComplete' | 'parseStylesheet'>
 
@@ -548,10 +549,15 @@ export async function run(): Promise<void> {
     assert.equal(extension.packageJSON.main, './dist/activation.mjs')
 
     const activationEntry = await stat(join(extension.extensionPath, 'dist', 'activation.mjs'))
+    const foldingEntry = await stat(join(extension.extensionPath, 'dist', 'folding.mjs'))
 
     assert.ok(
       activationEntry.size < activationEntrySizeBudgetBytes,
       `Expected activation entry under ${activationEntrySizeBudgetBytes} bytes; got ${activationEntry.size} bytes`,
+    )
+    assert.ok(
+      foldingEntry.size < foldingEntrySizeBudgetBytes,
+      `Expected independently loaded folding entry under ${foldingEntrySizeBudgetBytes} bytes; got ${foldingEntry.size} bytes`,
     )
   })
 
