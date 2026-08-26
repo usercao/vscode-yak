@@ -452,7 +452,7 @@ export function getSelectorCompletionContext(
 }
 
 export function getAtRuleCompletionContext(
-  source: string,
+  _source: string,
   cursorOffset: number,
   template: Template,
 ): AtRuleCompletionContext | undefined {

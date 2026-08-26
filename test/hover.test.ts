@@ -34,7 +34,7 @@ function hoverAtCursor(sourceWithCursor: string) {
   }
 }
 
-function createVirtualDocument(source: string, template: Template): VirtualCssDocument {
+function createVirtualDocument(_source: string, template: Template): VirtualCssDocument {
   const virtualCssText = createVirtualCssText(template)
 
   return {
