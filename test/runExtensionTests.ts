@@ -18,7 +18,7 @@ const options = {
     '.vscode-test',
     'compiled',
     'integration',
-    'extensionHost.cjs',
+    'extensionHost.mjs',
   ),
   launchArgs: [join(extensionDevelopmentPath, 'test-workspace'), '--disable-extensions'],
   version: '1.134.0',

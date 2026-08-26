@@ -8,7 +8,7 @@ export default defineConfig({
     runExtensionTests: 'test/runExtensionTests.ts',
     'integration/extensionHost': 'test/integration/extensionHost.ts',
   },
-  format: 'cjs',
+  format: 'esm',
   outDir: '.vscode-test/compiled',
   platform: 'node',
   target: 'node24',

@@ -326,7 +326,7 @@ async function createDirectProvider(
   cssCompletionService?: CssCompletionService,
 ): Promise<DirectCompletionProvider> {
   const extensionModule = (await import(
-    pathToFileURL(join(extensionPath, 'dist', 'extension.cjs')).href
+    pathToFileURL(join(extensionPath, 'dist', 'extension.mjs')).href
   )) as ExtensionModule
   const Provider =
     extensionModule.CssCompletionProvider ?? extensionModule.default?.CssCompletionProvider
@@ -337,7 +337,7 @@ async function createDirectProvider(
 
 async function createDirectHoverProvider(extensionPath: string): Promise<DirectHoverProvider> {
   const extensionModule = (await import(
-    pathToFileURL(join(extensionPath, 'dist', 'extension.cjs')).href
+    pathToFileURL(join(extensionPath, 'dist', 'extension.mjs')).href
   )) as ExtensionModule
   const Provider = extensionModule.CssHoverProvider ?? extensionModule.default?.CssHoverProvider
 
@@ -349,7 +349,7 @@ async function createDirectCodeActionProvider(
   extensionPath: string,
 ): Promise<DirectCodeActionProvider> {
   const extensionModule = (await import(
-    pathToFileURL(join(extensionPath, 'dist', 'extension.cjs')).href
+    pathToFileURL(join(extensionPath, 'dist', 'extension.mjs')).href
   )) as ExtensionModule
   const Provider =
     extensionModule.CssCodeActionProvider ?? extensionModule.default?.CssCodeActionProvider
@@ -360,7 +360,7 @@ async function createDirectCodeActionProvider(
 
 async function createDirectColorProvider(extensionPath: string): Promise<DirectColorProvider> {
   const extensionModule = (await import(
-    pathToFileURL(join(extensionPath, 'dist', 'extension.cjs')).href
+    pathToFileURL(join(extensionPath, 'dist', 'extension.mjs')).href
   )) as ExtensionModule
   const Provider = extensionModule.CssColorProvider ?? extensionModule.default?.CssColorProvider
 
@@ -532,9 +532,9 @@ export async function run(): Promise<void> {
   assert.ok(extension, 'The yak extension should be available in the Extension Development Host')
 
   await runCase('keeps the synchronous activation entry lightweight', async () => {
-    assert.equal(extension.packageJSON.main, './dist/activation.cjs')
+    assert.equal(extension.packageJSON.main, './dist/activation.mjs')
 
-    const activationEntry = await stat(join(extension.extensionPath, 'dist', 'activation.cjs'))
+    const activationEntry = await stat(join(extension.extensionPath, 'dist', 'activation.mjs'))
 
     assert.ok(
       activationEntry.size < activationEntrySizeBudgetBytes,

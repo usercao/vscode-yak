@@ -12,7 +12,7 @@ tsdown.config.ts
 tsdown.tests.config.ts
 *.vsix
 .yarn/*
-.tmp/*
+.tmp/**
 yarn.lock
 node_modules/**
 

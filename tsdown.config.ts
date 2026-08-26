@@ -36,8 +36,9 @@ export default defineConfig({
     ],
   },
   entry: ['src/activation.ts', 'src/extension.ts'],
-  format: 'cjs',
+  format: 'esm',
   outDir: 'dist',
   platform: 'node',
+  shims: true,
   target: 'node24',
 })

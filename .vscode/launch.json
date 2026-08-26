@@ -9,7 +9,7 @@
         "--extensionDevelopmentPath=${workspaceFolder}",
         "${workspaceFolder}/test-workspace"
       ],
-      "outFiles": ["${workspaceFolder}/dist/**/*.cjs"],
+      "outFiles": ["${workspaceFolder}/dist/**/*.mjs"],
       "preLaunchTask": "yarn: build"
     }
   ]

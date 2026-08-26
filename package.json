@@ -22,7 +22,7 @@
   },
   "publisher": "local",
   "type": "module",
-  "main": "./dist/activation.cjs",
+  "main": "./dist/activation.mjs",
   "scripts": {
     "build": "yarn generate:grammars && tsdown",
     "check": "tsc --noEmit",
@@ -34,7 +34,7 @@
     "lint:fix": "yarn exec oxlint --fix .",
     "package": "node scripts/packageExtension.ts",
     "test": "yarn generate:grammars:check && vitest run",
-    "test:integration": "yarn build && yarn test:integration:build && node ./.vscode-test/compiled/runExtensionTests.cjs",
+    "test:integration": "yarn build && yarn test:integration:build && node ./.vscode-test/compiled/runExtensionTests.mjs",
     "test:integration:build": "tsdown --config tsdown.tests.config.ts",
     "verify": "yarn check && yarn test && yarn test:integration && yarn package",
     "vscode:prepublish": "yarn build"
