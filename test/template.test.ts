@@ -751,6 +751,41 @@ describe('virtual CSS mapping', () => {
     )
   })
 
+  it('extracts an incomplete type selector line for element completion', () => {
+    const source = [
+      "import { styled } from 'next-yak'",
+      'const Link = styled.a`',
+      `  div${cursorMarker}`,
+      '`',
+    ].join('\n')
+    const found = findTemplateAtCursor(source)
+
+    expect(found.template).toBeDefined()
+    expect(getSelectorCompletionContext(found.source, found.cursorOffset, found.template!)).toEqual(
+      {
+        sourceStart: found.source.indexOf('div'),
+        text: 'div',
+      },
+    )
+  })
+
+  it('does not extract type selectors from descriptor blocks', () => {
+    const source = [
+      "import { globalStyle } from 'next-yak'",
+      'globalStyle`',
+      '  @font-face {',
+      `    div${cursorMarker}`,
+      '  }',
+      '`',
+    ].join('\n')
+    const found = findTemplateAtCursor(source)
+
+    expect(found.template).toBeDefined()
+    expect(
+      getSelectorCompletionContext(found.source, found.cursorOffset, found.template!),
+    ).toBeUndefined()
+  })
+
   it('does not extract selectors from at-rules, interpolations, or completed rules', () => {
     const cases = ['@media', 'a:hover {', '${value}']
 

@@ -489,6 +489,20 @@ export function getSelectorCompletionContext(
   cursorOffset: number,
   template: Template,
 ): SelectorCompletionContext | undefined {
+  const cursorInBody = cursorOffset - template.bodyStart
+  const lexicalState = getCssLexicalState(template.maskedBody, cursorInBody)
+
+  if (
+    template.tag === 'keyframes' ||
+    lexicalState.inComment ||
+    lexicalState.quote ||
+    lexicalState.blocks.some(
+      (block) => block.kind === 'descriptor' || block.kind === 'keyframes',
+    )
+  ) {
+    return undefined
+  }
+
   const lineStart = source.lastIndexOf('\n', cursorOffset - 1) + 1
   let sourceStart = Math.max(lineStart, template.bodyStart)
   let text = source.slice(sourceStart, cursorOffset)
@@ -497,7 +511,11 @@ export function getSelectorCompletionContext(
   sourceStart += indentation
   text = text.slice(indentation)
 
-  if (!text || !text.includes(':') || /[;{}]/.test(text)) {
+  if (
+    !text ||
+    /[;{}]/.test(text) ||
+    (!text.includes(':') && !/^[a-zA-Z][\w-]*$/.test(text))
+  ) {
     return undefined
   }
 

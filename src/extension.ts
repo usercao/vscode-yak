@@ -695,9 +695,15 @@ function getSelectorCompletionItems(
     selectorDocument.document,
     selectorDocument.document.positionAt(selectorContext.text.length),
   )
+  const completesPseudoSelector = selectorContext.text.includes(':')
 
   return cssItems
-    .filter((item) => item.label.startsWith(':') && !existingLabels.has(item.label))
+    .filter(
+      (item) =>
+        (completesPseudoSelector
+          ? item.label.startsWith(':')
+          : isTypeSelectorCompletion(item)) && !existingLabels.has(item.label),
+    )
     .flatMap((item) => {
       const completion = toSafeSelectorCompletionItem(
         item,
@@ -705,8 +711,21 @@ function getSelectorCompletionItems(
         selectorDocument,
         selectorContext,
       )
+
+      if (
+        completion &&
+        !completesPseudoSelector &&
+        item.label.toLowerCase() === selectorContext.text.toLowerCase()
+      ) {
+        completion.preselect = true
+      }
+
       return completion ? [completion] : []
     })
+}
+
+function isTypeSelectorCompletion(item: CssCompletionItem) {
+  return !item.label.startsWith(':') && /^[a-zA-Z][\w-]*$/.test(item.label)
 }
 
 function getCssCompletionItems(
@@ -852,7 +871,15 @@ function completionLabel(item: vscode.CompletionItem) {
 function isSelectorCompletionContext(context: SelectorCompletionContext) {
   const selector = context.text.trim()
 
-  if (selector.startsWith('@') || !/:{1,2}[-\w]*$/.test(selector)) {
+  if (selector.startsWith('@')) {
+    return false
+  }
+
+  if (/^[a-zA-Z][\w-]*$/.test(selector)) {
+    return !cssPropertyNames.has(selector.toLowerCase())
+  }
+
+  if (!/:{1,2}[-\w]*$/.test(selector)) {
     return false
   }
 

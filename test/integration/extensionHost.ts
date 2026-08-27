@@ -1200,6 +1200,16 @@ export async function run(): Promise<void> {
     await assertPseudoCompletion('&:fo', ':focus', '&:focus')
   })
 
+  await runCase('returns HTML element selectors without Emmet expansion text', async () => {
+    const { document, items } = await completionItems({ source: styledSource('div') })
+    const item = findExtensionItem(items, 'div')
+
+    assert.ok(item, `Expected div in ${extensionItems(items).map(completionLabel).join(', ')}`)
+    assert.equal(document.getText(completionRange(item)), 'div')
+    assert.equal(completionInsertText(item), 'div')
+    assert.equal(item.preselect, true)
+  })
+
   await runCase('does not use pseudo fallback in declaration and at-rule contexts', async () => {
     const sourceForLine = (line: string): string =>
       [
@@ -2204,7 +2214,7 @@ export async function run(): Promise<void> {
       parseStylesheet: () => ({}),
     }
     const provider = await createDirectProvider(extension.extensionPath, malformedService)
-    const request = await directProviderRequest(styledSource())
+    const request = await directProviderRequest(styledSource(''))
     const items =
       provider.provideCompletionItems(request.document, request.position, neverCancelledToken)
         ?.items ?? []
