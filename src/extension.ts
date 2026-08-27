@@ -712,12 +712,14 @@ function getSelectorCompletionItems(
         selectorContext,
       )
 
-      if (
-        completion &&
-        !completesPseudoSelector &&
-        item.label.toLowerCase() === selectorContext.text.toLowerCase()
-      ) {
-        completion.preselect = true
+      if (completion && !completesPseudoSelector) {
+        const completesExactTypeSelector =
+          item.label.toLowerCase() === selectorContext.text.toLowerCase()
+
+        if (completesExactTypeSelector) {
+          completion.filterText = selectorContext.text
+          completion.preselect = true
+        }
       }
 
       return completion ? [completion] : []
@@ -956,15 +958,21 @@ function toSafeCompletionItem(
   }
 }
 
+function toVscodeCompletionItemKind(kind: CssCompletionItem['kind']) {
+  if (typeof kind !== 'number' || kind < 1 || kind > 25) {
+    return vscode.CompletionItemKind.Property
+  }
+
+  // LSP completion kinds are one-based while the matching VS Code enum is zero-based.
+  return (kind - 1) as vscode.CompletionItemKind
+}
+
 function toCompletionItem(
   item: CssCompletionItem,
   document: vscode.TextDocument,
   virtualCss: VirtualCssDocument,
 ): vscode.CompletionItem | undefined {
-  const completion = new vscode.CompletionItem(
-    item.label,
-    item.kind ? (item.kind as vscode.CompletionItemKind) : vscode.CompletionItemKind.Property,
-  )
+  const completion = new vscode.CompletionItem(item.label, toVscodeCompletionItemKind(item.kind))
   const textEdit = getTextEdit(item)
 
   if (textEdit) {

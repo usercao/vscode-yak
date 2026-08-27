@@ -1200,14 +1200,79 @@ export async function run(): Promise<void> {
     await assertPseudoCompletion('&:fo', ':focus', '&:focus')
   })
 
-  await runCase('returns HTML element selectors without Emmet expansion text', async () => {
-    const { document, items } = await completionItems({ source: styledSource('div') })
-    const item = findExtensionItem(items, 'div')
+  await runCase('prioritizes CSS type selectors over Emmet expansions', async () => {
+    for (const selector of ['div', 'button', 'section', 'input']) {
+      const prefix = selector.toUpperCase()
+      const source = styledSource(prefix)
+      const cursorOffset = source.indexOf(cursorMarker)
+      const { document, items } = await completionItems({ source })
+      const item = findExtensionItem(items, selector)
 
-    assert.ok(item, `Expected div in ${extensionItems(items).map(completionLabel).join(', ')}`)
-    assert.equal(document.getText(completionRange(item)), 'div')
-    assert.equal(completionInsertText(item), 'div')
-    assert.equal(item.preselect, true)
+      assert.ok(
+        item,
+        `Expected ${selector} in ${extensionItems(items).map(completionLabel).join(', ')}`,
+      )
+      assert.equal(document.getText(completionRange(item)), prefix)
+      assert.equal(completionInsertText(item), selector)
+      assert.equal(item.filterText, prefix)
+      assert.equal(item.kind, vscode.CompletionItemKind.Keyword)
+      assert.equal(item.preselect, true)
+
+      const editor = await vscode.window.showTextDocument(document, {
+        preview: false,
+        preserveFocus: false,
+      })
+      const cursorPosition = document.positionAt(cursorOffset)
+      editor.selection = new vscode.Selection(cursorPosition, cursorPosition)
+
+      await vscode.commands.executeCommand('editor.action.triggerSuggest', { auto: true })
+      await new Promise<void>((resolve) => setTimeout(resolve, 100))
+      await vscode.commands.executeCommand('acceptSelectedSuggestion')
+      await new Promise<void>((resolve) => setTimeout(resolve, 100))
+
+      assert.ok(
+        document.getText().includes(`  ${selector}\n`),
+        `Expected ${selector} after accepting the selected suggestion, received ${document.getText()}`,
+      )
+      assert.ok(
+        !document.getText().includes('<'),
+        `Expected the selected CSS suggestion to avoid HTML expansion, received ${document.getText()}`,
+      )
+    }
+  })
+
+  await runCase('keeps CSS type selectors selected while typing', async () => {
+    const source = styledSource('')
+    const cursorOffset = source.indexOf(cursorMarker)
+    const document = await vscode.workspace.openTextDocument({
+      language: 'typescriptreact',
+      content: source.replace(cursorMarker, ''),
+    })
+    const editor = await vscode.window.showTextDocument(document, {
+      preview: false,
+      preserveFocus: false,
+    })
+    const cursorPosition = document.positionAt(cursorOffset)
+    editor.selection = new vscode.Selection(cursorPosition, cursorPosition)
+
+    for (const character of 'DIV') {
+      await vscode.commands.executeCommand('type', { text: character })
+      await new Promise<void>((resolve) => setTimeout(resolve, 100))
+    }
+
+    await vscode.commands.executeCommand('editor.action.triggerSuggest', { auto: true })
+    await new Promise<void>((resolve) => setTimeout(resolve, 100))
+    await vscode.commands.executeCommand('acceptSelectedSuggestion')
+    await new Promise<void>((resolve) => setTimeout(resolve, 100))
+
+    assert.ok(
+      document.getText().includes('  div\n'),
+      `Expected CSS div completion to replace DIV, received ${document.getText()}`,
+    )
+    assert.ok(
+      !document.getText().includes('<div>'),
+      `Expected the selected CSS suggestion to avoid HTML expansion, received ${document.getText()}`,
+    )
   })
 
   await runCase('does not use pseudo fallback in declaration and at-rule contexts', async () => {
