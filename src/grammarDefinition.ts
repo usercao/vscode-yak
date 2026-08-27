@@ -46,6 +46,7 @@ export function createInjectionGrammar(options: InjectionGrammarOptions): TextMa
   const interpolationName = `meta.embedded.line.${options.language === 'typescript' ? 'ts' : 'js'}`
   const interpolationKey = `interpolation-${options.language === 'typescript' ? 'ts' : 'js'}`
   const expressionScope = `source.${options.language === 'typescript' ? 'ts' : 'js'}#expression`
+  const typeArgument = createTypeArgumentPattern()
 
   return {
     $schema: 'https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json',
@@ -54,7 +55,9 @@ export function createInjectionGrammar(options: InjectionGrammarOptions): TextMa
     patterns: [
       createTemplatePattern(styledTagNames, interpolationKey, {
         suffix:
-          '(?:\\s*\\.\\s*[_$[:alpha:]][_$[:alnum:]]*(?:\\s*<[^`\\n]*>)?|\\s*\\[\\s*[\'"][^\'"`\\n]+[\'"]\\s*\\](?:\\s*<[^`\\n]*>)?|\\s*\\([^`\\n]*\\)(?:\\s*<[^`\\n]*>)?)(?:\\s*\\.\\s*attrs(?:\\s*<[^`\\n]*>)?\\s*\\([^`\\n]*\\))*\\s*(`)',
+          `(?:\\s*\\.\\s*[_$[:alpha:]][_$[:alnum:]]*${typeArgument}|\\s*\\[\\s*['"][^'"\`\\n]+['"]\\s*\\]${typeArgument}|\\s*\\([^\`\\n]*\\)${typeArgument})(?:\\s*\\.\\s*attrs${typeArgument}\\s*\\([^\`\\n]*\\))*\\s*(\`)`,
+        primitiveTypeCaptureIndices: options.language === 'typescript' ? [2, 3, 4, 5] : [],
+        templateBeginCaptureIndex: 6,
       }),
       createTemplatePattern(namedTagNames, interpolationKey, { suffix: '\\s*(`)' }),
       createTemplatePattern(keyframesTagNames, interpolationKey, {
@@ -134,13 +137,34 @@ function getTagNames(tags: ReadonlyMap<string, TemplateTag>, ...requestedTags: T
     .sort((left, right) => right.length - left.length || left.localeCompare(right))
 }
 
+function createTypeArgumentPattern() {
+  const primitiveTypes = 'any|bigint|boolean|never|null|number|object|string|symbol|undefined|unknown|void'
+
+  return `(?:\\s*<[^\`\\n]*?\\b(${primitiveTypes})\\b[^\`\\n]*>|\\s*<[^\`\\n]*>)?`
+}
+
 function createTemplatePattern(
   tagNames: readonly string[],
   interpolationKey: string,
-  options: { includeKeyframeStep?: boolean; suffix: string },
+  options: {
+    includeKeyframeStep?: boolean
+    primitiveTypeCaptureIndices?: readonly number[]
+    suffix: string
+    templateBeginCaptureIndex?: number
+  },
 ): TextMateGrammar {
   const tagExpression = createTagExpression(tagNames)
   const patterns: TextMateGrammar[] = [{ include: `#${interpolationKey}` }]
+  const beginCaptures: TextMateGrammar = {
+    1: { name: 'entity.name.function.tagged-template.yak' },
+    [options.templateBeginCaptureIndex ?? 2]: {
+      name: 'punctuation.definition.string.template.begin.yak',
+    },
+  }
+
+  for (const captureIndex of options.primitiveTypeCaptureIndices ?? []) {
+    beginCaptures[captureIndex] = { name: 'support.type.primitive.ts' }
+  }
 
   if (options.includeKeyframeStep) {
     patterns.push({ include: '#keyframe-step' })
@@ -157,10 +181,7 @@ function createTemplatePattern(
     name: 'meta.embedded.block.css.yak',
     contentName: 'source.css',
     begin: `(?<![_$[:alnum:].])(?:(?:[_$[:alpha:]][_$[:alnum:]]*)\\s*\\.\\s*)?(${tagExpression})${options.suffix}`,
-    beginCaptures: {
-      1: { name: 'entity.name.function.tagged-template.yak' },
-      2: { name: 'punctuation.definition.string.template.begin.yak' },
-    },
+    beginCaptures,
     end: '`',
     endCaptures: {
       0: { name: 'punctuation.definition.string.template.end.yak' },

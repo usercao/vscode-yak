@@ -251,6 +251,9 @@ describe('yak TextMate grammar', () => {
         'const Callable = styled(Component).attrs<Props>({ role: "presentation" })`',
         '  outline-color: black;',
         '`',
+        'const InlineProps = styled.button<{ $primary: boolean }>`',
+        '  border-color: currentcolor;',
+        '`',
         'const after = true',
       ]
       const tokenizedLines = lines.map((line) => {
@@ -263,6 +266,7 @@ describe('yak TextMate grammar', () => {
         [3, 'color'],
         [6, 'background'],
         [9, 'outline-color'],
+        [12, 'border-color'],
       ] as const) {
         expect(
           scopesAtOffset(
@@ -273,7 +277,12 @@ describe('yak TextMate grammar', () => {
         ).toContain('support.type.property-name.css')
       }
       expect(
-        scopesAtOffset(lines[11], tokenizedLines[11], lines[11].indexOf('const')),
+        scopesAtOffset(lines[11], tokenizedLines[11], lines[11].indexOf('boolean')).some((scope) =>
+          scope.startsWith('support.type.primitive.ts'),
+        ),
+      ).toBe(true)
+      expect(
+        scopesAtOffset(lines[14], tokenizedLines[14], lines[14].indexOf('const')),
       ).not.toContain('source.css')
     },
   )
