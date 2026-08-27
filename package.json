@@ -121,6 +121,7 @@
     "onLanguage:typescript",
     "onLanguage:typescriptreact"
   ],
+  "icon": "images/icon.png",
   "engines": {
     "node": ">=24.18.1",
     "vscode": "^1.134.0"
